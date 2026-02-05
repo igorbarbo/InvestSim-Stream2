@@ -1,0 +1,49 @@
+import streamlit as st
+from utils.market import get_price_history
+import pandas as pd
+
+# Configuração da página
+st.set_page_config(page_title="Análise de Ativos", page_icon="📈")
+
+st.title("📈 Análise de Ativos Reais")
+st.markdown("""
+Nesta seção, você pode buscar o histórico de preços diretamente da bolsa de valores.
+""")
+
+# Barra lateral específica desta página
+st.sidebar.header("Configuração da Busca")
+ticker = st.sidebar.text_input("Ticker do Ativo (ex: PETR4.SA, IVVB11.SA, AAPL)", value="PETR4.SA")
+periodo = st.sidebar.selectbox("Período de Análise", options=["1y", "2y", "5y", "10y", "max"], index=2)
+
+st.divider()
+
+# Botão para disparar a busca
+if st.sidebar.button("Consultar Dados"):
+    with st.spinner(f"Buscando dados de {ticker}..."):
+        dados = get_price_history(ticker, period=periodo)
+
+        if dados is not None and not dados.empty:
+            # Cálculos Rápidos
+            preco_atual = dados.iloc[-1]
+            preco_inicial = dados.iloc[0]
+            variacao = ((preco_atual / preco_inicial) - 1) * 100
+
+            # Métricas
+            c1, c2 = st.columns(2)
+            c1.metric("Preço Atual", f"R$ {preco_atual:.2f}")
+            c2.metric("Variação no Período", f"{variacao:.2f}%", delta=f"{variacao:.2f}%")
+
+            # Gráfico Principal
+            st.subheader(f"Evolução Histórica - {ticker}")
+            st.line_chart(dados)
+            
+            # Tabela de Dados (opcional, recolhida)
+            with st.expander("Ver tabela de preços detalhada"):
+                st.dataframe(dados)
+        else:
+            st.error(f"Não foi possível encontrar dados para o ticker '{ticker}'. Verifique se ele existe e tente novamente.")
+else:
+    st.info("Digite um ticker na barra lateral e clique em 'Consultar Dados' para começar.")
+
+st.sidebar.markdown("---")
+st.sidebar.caption("Dados fornecidos via Yahoo Finance API.")
