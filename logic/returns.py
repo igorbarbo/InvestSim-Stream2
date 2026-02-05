@@ -1,9 +1,5 @@
-# Calcula o retorno real descontando a inflação
-def real_return(amount: float, rate: float, inflation: float) -> float:
+def real_return(future_value, inflation_rate, years):
     """
-    amount    : Valor futuro nominal
-    rate      : Taxa de retorno anual nominal (em decimal)
-    inflation : Inflação anual (em decimal)
+    Ajusta o valor futuro pela inflação.
     """
-    # Fórmula simples para valor real
-    return amount / (1 + inflation)
+    return round(future_value / ((1 + inflation_rate) ** years), 2)
