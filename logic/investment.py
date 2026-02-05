@@ -1,26 +1,10 @@
-import pandas as pd
+# logic/investment.py
 
-def calcular_investimento(inicial, mensal, taxa_anual, anos):
+def simulate_investment(amount: float, rate: float, years: int) -> float:
     """
-    Calcula a evolução patrimonial com juros compostos mensais.
+    Simula o valor futuro de um investimento simples composto.
+    amount : Valor inicial investido
+    rate   : Taxa de retorno anual (em decimal, ex: 0.05 = 5%)
+    years  : Número de anos
     """
-    meses = anos * 12
-    # Transforma taxa anual em mensal (juros compostos)
-    taxa_mensal = (1 + taxa_anual/100)**(1/12) - 1
-    
-    saldo = inicial
-    dados = []
-    
-    for mes in range(0, meses + 1):
-        if mes > 0:
-            juros = saldo * taxa_mensal
-            saldo += juros + mensal
-            
-        dados.append({
-            "Mês": mes, 
-            "Saldo": round(saldo, 2),
-            "Investido": round(inicial + (mensal * mes), 2)
-        })
-    
-    return pd.DataFrame(dados)
-    
+    return amount * (1 + rate) ** years
