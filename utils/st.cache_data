@@ -1,0 +1,6 @@
+import streamlit as st
+import yfinance as yf
+
+@st.cache_data(ttl=3600) # Guarda os dados por 1 hora
+def get_price_history(ticker, period="5y"):
+    # ... seu código atual ...
