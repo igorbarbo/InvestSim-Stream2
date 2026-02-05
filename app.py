@@ -1,43 +1,42 @@
 import streamlit as st
 import pandas as pd
+from logic.investment import calcular_investimento
 
-# Aqui está a mágica: importamos a lógica das pastas que você organizou
-from logic.investment import simulate_investment
-from logic.returns import real_return
-from components.cards import display_main_metrics
-
-# 1. Configuração Visual
+# 1. Configuração da Página
 st.set_page_config(page_title="InvestSim Pro", layout="wide")
-st.title("💰 InvestSim: Inteligência Patrimonial")
 
-# 2. Sidebar (Entradas de dados)
-st.sidebar.header("📊 Parâmetros")
-v_ini = st.sidebar.number_input("Investimento Inicial", value=1000.0)
-v_mensal = st.sidebar.number_input("Aporte Mensal", value=200.0)
-t_anual = st.sidebar.slider("Rentabilidade Esperada (% a.a.)", 0.0, 30.0, 10.0) / 100
-inf_anual = st.sidebar.number_input("Expectativa de Inflação (% a.a.)", value=4.5) / 100
-anos = st.sidebar.slider("Tempo (Anos)", 1, 40, 10)
+st.title("💰 Simulador de Investimentos")
+st.caption("Acompanhe a evolução do seu patrimônio em tempo real.")
 
-# 3. Processamento (Lógica Modular)
-meses = anos * 12
-taxa_real_anual = real_return(t_anual, inf_anual)
+# 2. Criando o Layout em Colunas (Item 1 do nosso plano)
+col_input, col_output = st.columns([1, 2], gap="large")
 
-df_nominal = simulate_investment(v_ini, v_mensal, t_anual, meses)
-df_real = simulate_investment(v_ini, v_mensal, taxa_real_anual, meses)
+with col_input:
+    st.subheader("Configurações")
+    # Container para agrupar os inputs visualmente
+    with st.container(border=True):
+        v_inicial = st.number_input("Investimento Inicial (R$)", value=1000.0, step=500.0)
+        v_mensal = st.number_input("Aporte Mensal (R$)", value=100.0, step=50.0)
+        v_taxa = st.slider("Taxa Anual (%)", 1.0, 20.0, 10.0)
+        v_tempo = st.slider("Tempo (Anos)", 1, 30, 5)
 
-# 4. Interface (Componentes)
-tot_bruto = df_nominal['Patrimônio'].iloc[-1]
-tot_real = df_real['Patrimônio'].iloc[-1]
-investido = v_ini + (v_mensal * meses)
+with col_output:
+    # Chama a função com o nome correto
+    df = calcular_investimento(v_inicial, v_mensal, v_taxa, v_tempo)
+    
+    # 3. Cards Inteligentes (Item 2 do nosso plano)
+    val_final = df['Saldo'].iloc[-1]
+    investido = df['Investido'].iloc[-1]
+    lucro = val_final - investido
 
-display_main_metrics(tot_bruto, tot_real, investido)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Patrimônio Final", f"R$ {val_final:,.2f}")
+    c2.metric("Total Investido", f"R$ {investido:,.2f}")
+    c3.metric("Ganho em Juros", f"R$ {lucro:,.2f}", delta=f"{(lucro/investido)*100:.1f}%")
 
-# 5. Gráfico de Área Profissional
-st.subheader("📈 Evolução do Patrimônio Real")
-grafico_final = pd.DataFrame({
-    "Mês": df_nominal["Mês"],
-    "Valor Bruto": df_nominal["Patrimônio"],
-    "Poder de Compra (Real)": df_real["Patrimônio"]
-}).set_index("Mês")
-
-st.area_chart(grafico_final, color=["#1c3d5a", "#29b5e8"])
+    # 4. Gráfico Comparativo (Item 4 do nosso plano)
+    st.divider()
+    st.write("### Evolução Patrimonial")
+    # Mostra tanto o Saldo quanto o que foi Investido para o usuário ver a diferença
+    st.line_chart(df.set_index("Mês")[["Saldo", "Investido"]])
+    
