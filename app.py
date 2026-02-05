@@ -1,35 +1,12 @@
 import pandas as pd
 import streamlit as st
 
-# -------------------------------
-# IMPORTS DE LÓGICA
-# -------------------------------
-# Importamos funções do pacote logic. Se ainda não existirem, crie um placeholder
-try:
-    from logic.investment import simulate_investment
-except ImportError:
-    # Placeholder para evitar que o app quebre
-    def simulate_investment(amount, rate, years):
-        st.warning("Função simulate_investment não encontrada. Retornando valor padrão.")
-        return amount * (1 + rate) ** years
-
-try:
-    from logic.returns import real_return
-except ImportError:
-    # Placeholder para evitar que o app quebre
-    def real_return(amount, rate, inflation):
-        st.warning("Função real_return não encontrada. Retornando valor padrão.")
-        return amount * (1 + rate - inflation)
-
+from logic.investment import simulate_investment
+from logic.returns import real_return
 from components.cards import display_main_metrics
-
-# -------------------------------
-# LÓGICA DO APP
-# -------------------------------
 
 st.title("Simulador de Investimentos")
 
-# Exemplo de input do usuário
 initial_amount = st.number_input("Valor inicial (R$):", value=1000.0)
 interest_rate = st.number_input("Taxa de retorno anual (%):", value=5.0) / 100
 years = st.number_input("Número de anos:", value=10, step=1)
