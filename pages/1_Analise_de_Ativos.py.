@@ -2,24 +2,39 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-@st.cache_data(ttl=3600)  # Melhoria 5: Cache para não travar o app a cada clique
-def get_price_history(ticker, period="5y"):
-    """Busca histórico de preços e trata erros de ativos brasileiros."""
+
+@st.cache_data(ttl=3600)
+def get_price_history(ticker: str, period: str = "5y") -> pd.Series | None:
+    """
+    Busca histórico de preços (Adj Close).
+    - Suporta ativos brasileiros (ex: PETR4 → PETR4.SA)
+    - Usa cache para evitar múltiplas requisições
+    """
+
+    if not ticker:
+        return None
+
+    ticker = ticker.strip().upper()
+
+    # Ativos brasileiros normalmente não têm mais de 6 caracteres
+    if not ticker.endswith(".SA") and len(ticker) <= 6:
+        ticker = f"{ticker}.SA"
+
     try:
-        # Garante que tickers brasileiros tenham o .SA
-        if not ticker.endswith(".SA") and len(ticker) <= 6:
-            # Tenta adicionar .SA se for um ticker curto (ex: PETR4)
-            ticker_search = f"{ticker.upper()}.SA"
-        else:
-            ticker_search = ticker.upper()
-            
-        data = yf.download(ticker_search, period=period)
-        
-        if data.empty:
+        data = yf.download(
+            ticker,
+            period=period,
+            progress=False,
+            auto_adjust=False
+        )
+
+        if data is None or data.empty:
             return None
-            
-        # Retorna apenas o preço de fechamento ajustado
-        return data["Adj Close"]
-    except Exception as e:
-        print(f"Erro ao buscar {ticker}: {e}")
+
+        if "Adj Close" not in data.columns:
+            return None
+
+        return data["Adj Close"].dropna()
+
+    except Exception:
         return None
