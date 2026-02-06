@@ -1,4 +1,14 @@
 import streamlit as st
+from logic.investment import obter_taxa_cenario
+
+# ===============================
+# CONTROLE DE ESTADO (OBRIGATÓRIO)
+# ===============================
+if "perfil" not in st.session_state:
+    st.session_state.perfil = "Conservador"
+
+if "taxa" not in st.session_state:
+    st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)import streamlit as st
 
 st.title("📊 Carteira de Investimentos")
 
