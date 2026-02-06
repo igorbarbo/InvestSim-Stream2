@@ -15,11 +15,14 @@ if "taxa" not in st.session_state:
     st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
 
 # ===============================
-# CONTROLES
+# FUNÇÃO DE ATUALIZAÇÃO DE TAXA
 # ===============================
 def atualizar_taxa():
     st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
 
+# ===============================
+# CONTROLES
+# ===============================
 st.selectbox(
     "Perfil:",
     ["Conservador", "Moderado", "Agressivo"],
@@ -53,6 +56,7 @@ if df.empty:
     st.warning("Não foi possível calcular o investimento.")
     st.stop()
 
+# Renomeia colunas sem acento
 df = df.rename(columns={
     "Mês": "Mes",
     "Patrimônio Total": "Patrimonio Total"
