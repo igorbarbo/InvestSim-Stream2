@@ -2,8 +2,17 @@ import streamlit as st
 import pandas as pd
 from logic.investment import calcular_investimento, obter_taxa_cenario
 
-st.set_page_config(page_title="Carteira", layout="wide")
+
+# ===============================
+# CONFIGURAÇÃO DA PÁGINA
+# ===============================
+st.set_page_config(
+    page_title="Carteira",
+    layout="wide"
+)
+
 st.title("📊 Carteira de Investimentos")
+
 
 # ===============================
 # SESSION STATE
@@ -14,18 +23,20 @@ if "perfil" not in st.session_state:
 if "taxa" not in st.session_state:
     st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
 
+
 # ===============================
-# FUNÇÃO DE ATUALIZAÇÃO DE TAXA
+# FUNÇÃO DE ATUALIZAÇÃO
 # ===============================
 def atualizar_taxa():
     st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
+
 
 # ===============================
 # CONTROLES
 # ===============================
 st.selectbox(
     "Perfil:",
-    ["Conservador", "Moderado", "Agressivo"],
+    options=["Conservador", "Moderado", "Agressivo"],
     key="perfil",
     on_change=atualizar_taxa
 )
@@ -38,9 +49,27 @@ st.slider(
     key="taxa"
 )
 
-v_inicial = st.number_input("Inicial (R$)", value=1000.0, min_value=0.0, step=100.0)
-v_mensal = st.number_input("Mensal (R$)", value=100.0, min_value=0.0, step=50.0)
-v_tempo = st.slider("Anos", min_value=1, max_value=35, value=10)
+v_inicial = st.number_input(
+    "Inicial (R$)",
+    value=1000.0,
+    min_value=0.0,
+    step=100.0
+)
+
+v_mensal = st.number_input(
+    "Mensal (R$)",
+    value=100.0,
+    min_value=0.0,
+    step=50.0
+)
+
+v_tempo = st.slider(
+    "Anos",
+    min_value=1,
+    max_value=35,
+    value=10
+)
+
 
 # ===============================
 # CÁLCULO
@@ -52,24 +81,29 @@ df = calcular_investimento(
     anos=v_tempo
 )
 
-if df.empty:
+if df is None or df.empty:
     st.warning("Não foi possível calcular o investimento.")
     st.stop()
 
-# Renomeia colunas sem acento
+
+# ===============================
+# PADRONIZAÇÃO (SEM ACENTOS)
+# ===============================
 df = df.rename(columns={
     "Mês": "Mes",
     "Patrimônio Total": "Patrimonio Total"
 })
 
-final = df["Patrimonio Total"].iloc[-1]
-investido = df["Total Investido"].iloc[-1]
-ganho = final - investido
 
 # ===============================
-# RESULTADOS
+# MÉTRICAS
 # ===============================
+final = float(df["Patrimonio Total"].iloc[-1])
+investido = float(df["Total Investido"].iloc[-1])
+ganho = final - investido
+
 c1, c2, c3 = st.columns(3)
+
 c1.metric("Total Acumulado", f"R$ {final:,.2f}")
 c2.metric("Total Investido", f"R$ {investido:,.2f}")
 c3.metric(
@@ -78,5 +112,13 @@ c3.metric(
     delta=f"{(ganho / investido) * 100:.1f}%" if investido > 0 else None
 )
 
-df_chart = df.sort_values("Mes").set_index("Mes").copy()
-st.line_chart(df_chart[["Patrimonio Total", "Total Investido"]])
+
+# ===============================
+# GRÁFICO
+# ===============================
+df_chart = (
+    df.sort_values("Mes")
+      .set_index("Mes")[["Patrimonio Total", "Total Investido"]]
+)
+
+st.line_chart(df_chart)
