@@ -13,12 +13,18 @@ st.set_page_config(
 st.title("💰 InvestSim Pro")
 
 # ===============================
-# CONTROLE DE ESTADO (SESSION)
+# CONTROLE DE ESTADO
 # ===============================
 if "perfil" not in st.session_state:
     st.session_state.perfil = "Conservador"
 
 if "taxa" not in st.session_state:
+    st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
+
+# ===============================
+# FUNÇÃO DE ATUALIZAÇÃO DE TAXA
+# ===============================
+def atualizar_taxa():
     st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
 
 # ===============================
@@ -31,10 +37,7 @@ col_input, col_output = st.columns([1, 2], gap="large")
 # ===============================
 with col_input:
     st.subheader("Configurações")
-
-    def atualizar_taxa():
-        st.session_state.taxa = obter_taxa_cenario(st.session_state.perfil)
-
+    
     st.selectbox(
         "Perfil:",
         ["Conservador", "Moderado", "Agressivo"],
@@ -75,7 +78,6 @@ with col_input:
 # COLUNA DE RESULTADOS
 # ===============================
 with col_output:
-
     df = calcular_investimento(
         inicial=v_inicial,
         mensal=v_mensal,
