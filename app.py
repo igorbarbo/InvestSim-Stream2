@@ -1,3 +1,12 @@
+import sys
+import os
+
+# Adiciona o diretório atual ao sistema para que ele encontre as pastas logic, utils, etc.
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+import streamlit as st
+# Agora os seus imports vão funcionar:
+from logic.investment import calcular_investimento 
 import streamlit as st
 import pandas as pd
 from logic.investment import calcular_investimento, obter_taxa_cenario
