@@ -1,53 +1,24 @@
-import pandas as pd
+import numpy as np
 
-def calcular_investimento(
-    inicial: float, 
-    mensal: float, 
-    taxa_anual: float, 
-    anos: int
-) -> pd.DataFrame:
+def calcular_investimento(valor_inicial, aporte_mensal, taxa_anual, meses):
     """
-    Calcula a evolução do patrimônio com aportes mensais e juros compostos.
-
-    Args:
-        inicial (float): Valor inicial investido
-        mensal (float): Aporte mensal
-        taxa_anual (float): Taxa anual em %
-        anos (int): Período em anos
-
-    Returns:
-        pd.DataFrame: DataFrame com colunas 'Mes', 'Patrimonio Total', 'Total Investido'
+    Realiza o cálculo de juros compostos. 
+    Garante que o retorno seja um número real (float) para evitar o erro st.metric.
     """
-    meses = anos * 12
-    taxa_mensal = (1 + taxa_anual / 100) ** (1/12) - 1
-    saldo = inicial
-    dados = []
-
-    for mes in range(0, meses + 1):
-        if mes > 0:
-            saldo += saldo * taxa_mensal + mensal
-        dados.append({
-            "Mes": mes,
-            "Patrimonio Total": round(saldo, 2),
-            "Total Investido": round(inicial + mensal * mes, 2)
-        })
-    
-    return pd.DataFrame(dados)
-
-
-def obter_taxa_cenario(perfil: str) -> float:
-    """
-    Retorna a taxa anual sugerida para um perfil de investidor.
-
-    Args:
-        perfil (str): 'Conservador', 'Moderado' ou 'Agressivo'
-
-    Returns:
-        float: Taxa anual em %
-    """
-    cenarios = {
-        "Conservador": 10.5,
-        "Moderado": 13.5,
-        "Agressivo": 17.0
-    }
-    return cenarios.get(perfil, 10.0)
+    try:
+        # Converte taxa anual para mensal
+        taxa_mensal = (1 + float(taxa_anual))**(1/12) - 1
+        meses = int(meses)
+        
+        # Fórmula de juros compostos para o montante inicial
+        total = valor_inicial * (1 + taxa_mensal)**meses
+        
+        # Soma os aportes mensais com juros
+        if aporte_mensal > 0:
+            for i in range(1, meses + 1):
+                total += aporte_mensal * (1 + taxa_mensal)**(meses - i)
+        
+        return float(total)
+    except Exception:
+        return 0.0
+        
