@@ -1,19 +1,25 @@
 import streamlit as st
 import yfinance as yf
 
-st.title("🔍 Análise de Ativos")
-# Valor padrão seguro para evitar erro inicial
-ticker = st.text_input("Ticker (ex: ITUB4.SA):", "PETR4.SA").upper()
+st.title("🔍 Analisador B3 (Ações e FIIs)")
 
-if st.button("Buscar Dados"):
-    with st.spinner("Conectando ao Yahoo Finance..."):
-        acao = yf.Ticker(ticker)
-        # Busca histórico para garantir que o DataFrame não venha vazio
-        dados = acao.history(period="1y")
+ticker = st.text_input("Digite o Ticker (ex: BBAS3.SA ou HGLG11.SA):", "PETR4.SA").upper()
+
+if st.button("Analisar Ativo"):
+    with st.spinner("Acessando dados do Yahoo Finance..."):
+        # Versão 0.2.52 lida melhor com tickers da B3
+        ativo = yf.Ticker(ticker)
+        dados = ativo.history(period="1y")
         
         if not dados.empty:
+            st.subheader(f"Desempenho de {ticker} nos últimos 12 meses")
             st.line_chart(dados['Close'])
-            st.success(f"Dados de {ticker} carregados.")
+            
+            # Mostra Dividendos se for FII ou Ação pagadora
+            dividendos = ativo.dividends
+            if not dividendos.empty:
+                st.subheader("💰 Proventos Distribuídos")
+                st.bar_chart(dividendos.tail(12))
         else:
-            st.error(f"Erro: Não encontramos dados para {ticker}. Verifique a internet ou o código.")
+            st.error("Erro: Dados não encontrados. Verifique se o ticker termina em .SA")
             
