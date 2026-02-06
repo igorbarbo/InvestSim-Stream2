@@ -49,9 +49,8 @@ with col_output:
     st.divider()
     st.write("### Evolução: Juros Compostos vs. Capital Investido")
     
-    # Preparando gráfico com nomes limpos
     chart_data = df.set_index("Mês")[["Patrimônio Total", "Total Investido"]]
     st.line_chart(chart_data, width='stretch')
     
-    st.caption("💡 Note como a distância entre as linhas aumenta com o tempo: isso é o efeito dos juros sobre juros.")
+    st.caption("💡 A diferença entre as linhas representa o poder dos juros compostos no tempo.")
     
