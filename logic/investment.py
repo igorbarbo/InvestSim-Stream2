@@ -1,15 +1,15 @@
-def calcular_investimento(valor_inicial, aporte_mensal, taxa_anual, meses):
+def calcular_patrimonio(v_inicial, aporte, taxa_mensal_perc, meses):
+    """
+    Calcula o crescimento de patrimônio. 
+    Serve para Ações (taxa = valorização) e FIIs (taxa = dividendos).
+    """
     try:
-        # Garante que as entradas sejam números
-        v_ini = float(valor_inicial)
-        taxa = float(taxa_anual)
-        t = int(meses)
-        
-        taxa_mensal = (1 + taxa)**(1/12) - 1
-        total = v_ini * (1 + taxa_mensal)**t
-        
-        # Retorna apenas o número final, não um DataFrame
+        total = float(v_inicial)
+        taxa = float(taxa_mensal_perc) / 100
+        for _ in range(int(meses)):
+            # Aplica a taxa sobre o montante e soma o aporte
+            total = (total * (1 + taxa)) + float(aporte)
         return float(total)
-    except Exception as e:
+    except:
         return 0.0
         
