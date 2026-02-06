@@ -2,3 +2,4 @@ streamlit==1.54.0
 yfinance==0.2.52
 pandas==2.2.3
 numpy==2.2.1
+requests-cache==1.2.1
