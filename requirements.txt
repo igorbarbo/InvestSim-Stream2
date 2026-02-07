@@ -1,9 +1,9 @@
-streamlit==1.22.0
-pandas==2.3.3
-numpy==1.24.4
-matplotlib==3.7.2
-altair==6.0.1
+streamlit==1.54.0
+pandas==2.2.3
+numpy==2.3.5
+altair==6.0.0
 yfinance==0.2.52
 seaborn==0.12.2
 rich==14.3.2
+openpyxl==3.1.2
 pyyaml==6.0
