@@ -1,82 +1,66 @@
 import streamlit as st
-import pandas as pd
-import yfinance as yf
-import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
+import yfinance as yf
+import pandas as pd
+import plotly.express as px
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="InvestSim Pro", layout="wide", page_icon="📈")
+st.set_page_config(page_title="InvestSim Pro", layout="wide")
 
-# --- FUNÇÃO PARA CONVERSÃO DE LINK (RESOLVE ERRO 404) ---
-def formatar_link_google(url):
-    # Transforma o link de edição em um link de exportação direta de dados
-    if "/edit" in url:
-        return url.split("/edit")[0] + "/gviz/tq?tqx=out:csv"
-    return url
+# Função para garantir que o link esteja no formato correto de exportação
+def get_csv_url(base_url):
+    if "/edit" in base_url:
+        return base_url.split("/edit")[0] + "/gviz/tq?tqx=out:csv"
+    elif base_url.endswith("/"):
+        return base_url + "gviz/tq?tqx=out:csv"
+    else:
+        return base_url + "/gviz/tq?tqx=out:csv"
 
-# --- INTERFACE PRINCIPAL ---
 st.title("📂 Minha Carteira Pessoal")
 
-# Tenta carregar os dados
 try:
-    # 1. Tenta carregar via Secrets (Conector Oficial)
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    df = conn.read()
+    # Tenta conectar via Secrets
+    url_base = "https://docs.google.com/spreadsheets/d/1TWfuEvIn9YbSzEyFHKvWWD4XwppHhlj9Cm1RE6BweF8"
+    csv_url = get_csv_url(url_base)
     
-    # Se falhar ou vier vazio, tenta via URL direta (Método de Backup)
-    if df is None or df.empty:
-        url_direta = "https://docs.google.com/spreadsheets/d/1TWfuEvIn9YbSzEyFHKvWWD4XwppHhlj9Cm1RE6BweF8/gviz/tq?tqx=out:csv"
-        df = pd.read_csv(url_direta)
-
-    # Limpeza de dados
+    # Carrega os dados diretamente via Pandas (mais estável para evitar 404)
+    df = pd.read_csv(csv_url)
+    
+    # Limpa colunas vazias
     df = df.dropna(subset=['Ativo'])
 
     if not df.empty:
-        st.success("✅ Planilha conectada com sucesso!")
+        st.success("✅ Conectado à Planilha!")
         
-        if st.button("📊 Atualizar Patrimônio e Lucro"):
-            with st.spinner("Buscando cotações no Yahoo Finance..."):
-                # Lista de ativos
-                tickers = df['Ativo'].unique().tolist()
+        if st.button("📊 Atualizar Carteira"):
+            tickers = df['Ativo'].unique().tolist()
+            
+            # Busca preços no Yahoo Finance
+            with st.spinner("Atualizando cotações..."):
+                precos = yf.download(tickers, period="1d", progress=False)['Close']
                 
-                # Busca preços atuais
-                dados_mercado = yf.download(tickers, period="1d", progress=False)['Close']
-                
-                # Se for apenas um ativo, o yfinance retorna uma série
+                # Se houver apenas um ticker, ajusta o formato
                 if len(tickers) == 1:
-                    precos_atuais = {tickers[0]: dados_mercado.iloc[-1]}
+                    precos_dict = {tickers[0]: precos.iloc[-1]}
                 else:
-                    precos_atuais = dados_mercado.iloc[-1].to_dict()
+                    precos_dict = precos.iloc[-1].to_dict()
 
-                # Cálculos
+                # Cálculos financeiros
                 df['QTD'] = pd.to_numeric(df['QTD'], errors='coerce').fillna(0)
                 df['Preço Médio'] = pd.to_numeric(df['Preço Médio'], errors='coerce').fillna(0)
-                df['Preço Atual'] = df['Ativo'].map(precos_atuais)
+                df['Preço Atual'] = df['Ativo'].map(precos_dict)
+                df['Valor Total'] = df['QTD'] * df['Preço Atual']
                 
-                df['Total Investido'] = df['QTD'] * df['Preço Médio']
-                df['Valor de Mercado'] = df['QTD'] * df['Preço Atual']
-                df['Lucro/Prejuízo'] = df['Valor de Mercado'] - df['Total Investido']
-
-                # Métricas
-                total_patrimonio = df['Valor de Mercado'].sum()
-                c1, c2 = st.columns(2)
-                c1.metric("Patrimônio Total", f"R$ {total_patrimonio:,.2f}")
+                # Exibe Resultados
+                st.metric("Patrimônio Total", f"R$ {df['Valor Total'].sum():,.2f}")
                 
-                # Gráfico de Pizza
-                fig = px.pie(df, values='Valor de Mercado', names='Ativo', title="Divisão da Carteira")
+                fig = px.pie(df, values='Valor Total', names='Ativo', hole=0.4)
                 st.plotly_chart(fig, use_container_width=True)
-
-                # Tabela detalhada
-                st.dataframe(df.style.format({
-                    'Preço Médio': 'R$ {:.2f}', 
-                    'Preço Atual': 'R$ {:.2f}',
-                    'Total Investido': 'R$ {:.2f}',
-                    'Valor de Mercado': 'R$ {:.2f}'
-                }))
+                
+                st.dataframe(df)
     else:
-        st.warning("A planilha foi encontrada, mas as linhas estão vazias.")
+        st.warning("Planilha encontrada, mas está vazia.")
 
 except Exception as e:
-    st.error(f"Erro de Conexão: {e}")
-    st.info("Certifique-se de que a planilha está em 'Qualquer pessoa com o link'.")
+    st.error(f"Erro ao acessar dados: {e}")
+    st.info("Verifique se a planilha está como 'Qualquer pessoa com o link'.")
     
