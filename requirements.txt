@@ -1,5 +1,5 @@
-yfinance
+st-gsheets-connection==0.0.3
 pandas
+yfinance
 plotly
-st-gsheets-connection
 lxml
