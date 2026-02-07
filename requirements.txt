@@ -1,29 +1,19 @@
-# Streamlit
+Streamlit
+
 streamlit==1.54.0
 
-# Data
-numpy==2.3.5
-pandas==2.2.3
+Data
 
-# Finance
+numpy==2.3.5 pandas==2.2.3
+
+Finance
+
 yfinance==0.2.52
 
-# Visualização
-matplotlib==3.8.0
-seaborn==0.12.3
-altair==6.0.0
-pyplot==0.0.1  # se precisar de helpers extras para gráficos
+Visualização
 
-# Utilitários
-pyyaml==6.1  # versão atualizada para evitar erro de build
-rich==14.3.2
-markdown-it-py==4.0.0
-mdurl==0.1.2
-pygments==2.19.2
+matplotlib==3.8.0 seaborn==0.12.3 altair==6.0.0
 
-# Dependências extras que ajudam Streamlit Cloud
-requests==2.32.5
-urllib3==2.6.3
-python-dateutil==2.9.0.post0
-pytz==2025.2
-tzdata==2025.3
+Utilitários
+
+pyyaml==6.1 rich==14.3.2 markdown-it-py==4.0.0 mdurl==0.1.2 pygments==2.19.2 requests==2.32.5 urllib3==2.6.3 python-dateutil==2.9.0.post0 pytz==2025.2 tzdata==2025.3
