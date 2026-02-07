@@ -1,4 +1,5 @@
-streamlit>=1.35.0
-yfinance>=0.2.40
-pandas>=2.2.0
-PyYAML>=6.0.2
+yfinance
+pandas
+plotly
+st-gsheets-connection
+lxml
