@@ -5,10 +5,10 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import altair as alt
+from io import BytesIO
 
 # Importando funções do utils
 from utils.finance_utils import retorno_mensal, volatilidade_anual, max_drawdown, sharpe
-from utils.charts_utils import gerar_pdf
 
 # ===============================
 # Configuração do app
@@ -19,13 +19,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# -------------------------------
-# Tema Dark / Light
-# -------------------------------
-theme = st.sidebar.radio("Escolha o tema", ["Claro", "Escuro"])
-if theme == "Escuro":
-    st.markdown("<style>body{background-color:#0E1117;color:white}</style>", unsafe_allow_html=True)
 
 st.title("🦸‍♂️ InvestSim — Ultra Ninja Optimizado")
 st.caption("Máximo desempenho para Streamlit Cloud | Bola de Neve • Dividendos Reais • Ranking • Benchmarks")
@@ -43,7 +36,6 @@ ativos_final = [t.strip().upper() for t in ativos_input.split(",") if t.strip()]
 anos = st.sidebar.slider("Anos de investimento", 1, 30, 15)
 meta_anual = st.sidebar.number_input("Meta anual de patrimônio (R$)", value=500000, step=50000)
 
-# Aportes mensais variáveis
 st.sidebar.subheader("Aportes Mensais")
 aporte_default = [1000]*anos*12
 aporte_input = st.sidebar.text_area(
@@ -84,10 +76,8 @@ if not ativos_final:
 df_preco = pd.concat([get_precos(t) for t in ativos_final], axis=1).fillna(method="ffill")
 df_div = pd.concat([get_dividendos(t) for t in ativos_final], axis=1)
 
-# Limita resample mensal para performance
 df_preco = df_preco.resample('M').last()
 df_div = df_div.resample('M').sum()
-
 meses = anos*12
 df_preco = df_preco.iloc[:meses]
 df_div = df_div.iloc[:meses]
@@ -96,14 +86,14 @@ df_div = df_div.iloc[:meses]
 # Simulação Ultra Ninja vetorizada
 # ===============================
 aporte_array = np.pad(aportes_mensais, (0, meses - len(aportes_mensais)), 'edge')
-patrimonio = np.cumsum(aporte_array)  # inicial com aportes
+patrimonio = np.cumsum(aporte_array)
 dividendos = df_div.values.cumsum(axis=0)
-patrimonio_total = patrimonio[:,None] + dividendos
-carteira = patrimonio_total.sum(axis=1)
+carteira = patrimonio[:,None] + dividendos
+carteira_total = carteira.sum(axis=1)
 
 df_carteira = pd.DataFrame({
     "Mês": range(1, meses+1),
-    "Carteira": carteira,
+    "Carteira": carteira_total,
     "Dividendo": dividendos.sum(axis=1)
 })
 df_carteira["Ano"] = (df_carteira["Mês"]-1)//12 + 1
@@ -192,17 +182,23 @@ c3.metric("⚖️ Sharpe Ratio", f"{sh:.2f}")
 if dd < -0.2: st.warning(f"⚠️ Alto Drawdown: {dd:.2%}")
 
 # ===============================
-# Exportação PDF leve
+# Exportação PDF apenas com Altair
 # ===============================
-st.subheader("📄 Exportar Relatório PDF")
-if st.button("Gerar PDF"):
-    pdf = gerar_pdf(df_carteira, meses)
+st.subheader("📄 Exportar Relatório (CSV/Excel)")
+if st.button("Exportar CSV"):
     st.download_button(
-        label="Download PDF",
-        data=pdf,
-        file_name="InvestSim_Ultra_Ninja_Optimizado.pdf",
-        mime="application/pdf"
+        label="Download CSV",
+        data=df_carteira.to_csv(index=False).encode('utf-8'),
+        file_name="InvestSim_Ultra_Ninja.csv",
+        mime="text/csv"
+    )
+if st.button("Exportar Excel"):
+    st.download_button(
+        label="Download Excel",
+        data=df_carteira.to_excel(index=False, engine='openpyxl'),
+        file_name="InvestSim_Ultra_Ninja.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 st.markdown("---")
-st.caption("InvestSim — Ultra Ninja Optimizado | Performance máxima para Streamlit Cloud")
+st.caption("InvestSim — Ultra Ninja Optimizado | Deploy seguro no Streamlit Cloud")
