@@ -3,15 +3,9 @@ import pandas as pd
 import yfinance as yf
 import plotly.express as px
 
-st.set_page_config(page_title="InvestSim - Projeto Liberdade", layout="wide", page_icon="💰")
+st.set_page_config(page_title="InvestSim Advisor PRO", layout="wide", page_icon="📝")
 
-st.title("💰 Simulador de Bola de Neve e Liberdade Financeira")
-
-# --- SIDEBAR: CONFIGURAÇÕES DO PLANO ---
-st.sidebar.header("🗓️ Planejamento de Longo Prazo")
-aporte_mensal = st.sidebar.number_input("Aporte Mensal (R$)", value=3000.0, step=100.0)
-anos_projeção = st.sidebar.slider("Anos de Investimento", 1, 30, 10)
-taxa_mensal = st.sidebar.slider("Rendimento Mensal Esperado (%)", 0.0, 2.0, 0.8) / 100
+st.title("📝 Plano de Execução e Renda")
 
 def carregar_dados():
     try:
@@ -22,65 +16,78 @@ def carregar_dados():
     except:
         return pd.DataFrame()
 
-df = carregar_dados()
+# --- SIDEBAR ---
+st.sidebar.header("💰 Configuração do Aporte")
+valor_aporte = st.sidebar.number_input("Aporte em Dinheiro Novo (R$)", value=3000.0)
+taxa_mensal = 0.008 # Meta de 0,8%
 
-if not df.empty:
-    if st.button("📈 Simular Evolução de 10 Anos"):
-        with st.spinner("Calculando juros compostos..."):
-            # 1. Obter Patrimônio Atual
+df_pessoal = carregar_dados()
+
+if not df_pessoal.empty:
+    if st.button("🎯 Gerar Ordem de Compra"):
+        with st.spinner("Sincronizando mercado..."):
+            # 1. Dados e Câmbio
             cotacao_dolar = float(yf.download("USDBRL=X", period="1d", progress=False)['Close'].iloc[-1])
-            tickers = df['Ativo'].unique().tolist()
+            tickers = df_pessoal['Ativo'].unique().tolist()
             dados_mercado = yf.download(tickers, period="1d", progress=False)['Close']
-            
             precos_dict = {t: float(dados_mercado[t].iloc[-1] if len(tickers) > 1 else dados_mercado.iloc[-1]) for t in tickers}
-            df['Preço BRL'] = df['Ativo'].apply(lambda x: precos_dict.get(x, 0) * (cotacao_dolar if not x.endswith(".SA") else 1))
-            patrimonio_inicial = (df['QTD'] * df['Preço BRL']).sum()
 
-            # 2. Simulação Mês a Mês
-            meses = anos_projeção * 12
-            dados_simulacao = []
-            patrimonio_acumulado = patrimonio_inicial
+            # 2. Lógica de Categorias
+            def definir_tipo(ativo):
+                if '11' in ativo and ativo.endswith('.SA'): return 'FII'
+                if ativo.endswith('.SA'): return 'Ações Brasil'
+                return 'Internacional'
 
-            for mes in range(1, meses + 1):
-                dividendos_mes = patrimonio_acumulado * taxa_mensal
-                patrimonio_acumulado += aporte_mensal + dividendos_mes
-                
-                dados_simulacao.append({
-                    "Mês": mes,
-                    "Patrimônio": patrimonio_acumulado,
-                    "Dividendos Mensais": dividendos_mes,
-                    "Aporte Total": aporte_mensal * mes + patrimonio_inicial
-                })
-
-            df_simul = pd.DataFrame(dados_simulacao)
-
-            # --- RESULTADOS FINAIS ---
-            resumo_final = df_simul.iloc[-1]
+            df_pessoal['Tipo'] = df_pessoal['Ativo'].apply(definir_tipo)
+            df_pessoal['Preço BRL'] = df_pessoal['Ativo'].apply(lambda x: precos_dict.get(x, 0) * (cotacao_dolar if not x.endswith(".SA") else 1))
+            df_pessoal['Total Atual'] = df_pessoal['QTD'] * df_pessoal['Preço BRL']
             
-            st.subheader(f"📊 Resultado após {anos_projeção} anos")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Patrimônio Final", f"R$ {resumo_final['Patrimônio']:,.2f}")
-            c2.metric("Renda Mensal Estimada", f"R$ {resumo_final['Dividendos Mensais']:,.2f}")
-            c3.metric("Total de Dividendos no Mês", f"R$ {resumo_final['Dividendos Mensais']:,.2f}")
-
-            # --- GRÁFICOS DE EVOLUÇÃO ---
-            st.write("### 📈 Evolução do Patrimônio e Renda Passiva")
-            fig_evol = px.area(df_simul, x="Mês", y="Patrimônio", title="Crescimento do Patrimônio (Bola de Neve)")
-            st.plotly_chart(fig_evol, use_container_width=True)
+            patrimonio_atual = df_pessoal['Total Atual'].sum()
+            renda_atual = patrimonio_atual * taxa_mensal
             
-            fig_div = px.line(df_simul, x="Mês", y="Dividendos Mensais", title="Evolução da Renda Mensal (Dividendos para Reinvestir)")
-            st.plotly_chart(fig_div, use_container_width=True)
+            # Somando o rendimento do mês ao aporte (Bola de Neve)
+            total_disponivel = valor_aporte + renda_atual
+            novo_patrimonio = patrimonio_atual + total_disponivel
 
-            # --- TABELA DE REINVESTIMENTO ---
-            st.write("### 📅 Tabela de Projeção (Primeiros 12 meses)")
-            st.dataframe(df_simul.head(12).style.format({
-                "Patrimônio": "R$ {:.2f}",
-                "Dividendos Mensais": "R$ {:.2f}",
-                "Aporte Total": "R$ {:.2f}"
-            }))
+            # 3. Rebalanceamento (40/30/30)
+            metas = {'FII': 0.40, 'Ações Brasil': 0.30, 'Internacional': 0.30}
+            contagem = df_pessoal['Tipo'].value_counts()
+            df_pessoal['Meta Valor'] = df_pessoal['Tipo'].apply(lambda x: (novo_patrimonio * metas[x]) / contagem[x])
+            df_pessoal['Aporte R$'] = (df_pessoal['Meta Valor'] - df_pessoal['Total Atual']).clip(lower=0)
+            
+            total_nec = df_pessoal['Aporte R$'].sum()
+            if total_nec > 0:
+                df_pessoal['Aporte R$'] = (df_pessoal['Aporte R$'] / total_nec) * total_disponivel
+            
+            df_pessoal['QTD Compra'] = (df_pessoal['Aporte R$'] / df_pessoal['Preço BRL']).astype(int)
 
-            st.success(f"Dica: Ao final de {anos_projeção} anos, você estará recebendo R$ {resumo_final['Dividendos Mensais']:,.2f} todo mês sem precisar trabalhar!")
+            # --- EXIBIÇÃO ---
+            st.success(f"### Dinheiro Total para Investir: R$ {total_disponivel:,.2f}")
+            st.caption(f"(Aporte: R$ {valor_aporte:,.2f} + Dividendos do mês: R$ {renda_atual:,.2f})")
+
+            # LISTA DE COMPRAS ESTILIZADA
+            st.markdown("### 📋 ORDEM DE COMPRA (Para levar no App da Corretora)")
+            ordem_texto = ""
+            for _, row in df_pessoal[df_pessoal['QTD Compra'] > 0].iterrows():
+                linha = f"✅ **{row['Ativo']}**: Comprar **{row['QTD Compra']}** cotas (Aprox. R$ {row['Aporte R$']:,.2f})"
+                st.write(linha)
+                ordem_texto += linha + "\n"
+
+            # GRÁFICOS
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(px.pie(df_pessoal, values='Aporte R$', names='Ativo', title="Distribuição do Aporte Atual"), use_container_width=True)
+            with col2:
+                renda_nova = novo_patrimonio * taxa_mensal
+                fig_bar = px.bar(x=['Renda Atual', 'Nova Renda'], y=[renda_atual, renda_nova], color=[0,1], title="Evolução da Renda Mensal")
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            # ÁREA DE EXPORTAÇÃO
+            st.write("---")
+            st.subheader("📩 Exportar Plano")
+            st.text_area("Copie o texto abaixo e cole no seu WhatsApp ou Bloco de Notas:", 
+                         value=f"PLANO DE APORTE - INVESTSIM\nTotal: R$ {total_disponivel:,.2f}\n\n" + ordem_texto.replace("**", ""), height=200)
 
 else:
-    st.info("Aguardando dados da planilha...")
+    st.info("Sincronize os dados para gerar seu plano de ação.")
     
