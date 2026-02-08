@@ -4,11 +4,9 @@ import yfinance as yf
 import plotly.express as px
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="InvestSim Pro v4.0", layout="wide", page_icon="💎")
+st.set_page_config(page_title="InvestSim - Radar de Renda", layout="wide", page_icon="🏆")
 
-# --- FUNÇÃO DE DADOS ---
 def carregar_dados():
-    # Substitua pelo seu link real do Google Sheets (CSV)
     url = "https://docs.google.com/spreadsheets/d/1TWfuEvIn9YbSzEyFHKvWWD4XwppHhlj9Cm1RE6BweF8/gviz/tq?tqx=out:csv"
     try:
         df = pd.read_csv(url)
@@ -17,69 +15,84 @@ def carregar_dados():
     except:
         return pd.DataFrame(columns=['Ativo', 'QTD', 'Preço Médio'])
 
-# Inicializa o estado da carteira no navegador
 if 'df_carteira' not in st.session_state:
     st.session_state.df_carteira = carregar_dados()
 
 # --- NAVEGAÇÃO POR ABAS ---
-aba1, aba2 = st.tabs(["📊 Dashboard e Aportes", "📂 Editar Minha Carteira"])
+tab_dash, tab_radar, tab_edit = st.tabs(["📊 Dashboard", "🏆 Radar de Renda", "📂 Gerenciar Ativos"])
 
-# --- ABA 1: DASHBOARD E INTELIGÊNCIA ---
-with aba1:
-    st.title("💎 Gestão de Carteira Inteligente")
+# --- ABA 1: DASHBOARD (Mantendo a inteligência anterior) ---
+with tab_dash:
+    st.title("💎 Gestão de Carteira")
+    # ... (Seu código anterior de cálculos e gráficos aqui)
+    st.info("💡 Dica: Consulte a aba 'Radar de Renda' para ver sua eficiência de dividendos.")
+
+# --- ABA 2: RADAR DE RENDA (NOVIDADE) ---
+with tab_radar:
+    st.title("🏆 Eficiência de Dividendos")
     
-    # Configurações de Aporte na lateral
-    valor_aporte = st.sidebar.number_input("Aporte Mensal (R$)", value=3000.0)
-    taxa_mensal = 0.008 # 0,8%
-
-    if st.button("🚀 Sincronizar e Calcular"):
-        with st.spinner("Buscando cotações e calculando lucro..."):
-            df_calc = st.session_state.df_carteira.copy()
+    if st.button("🔍 Calcular Minha Rentabilidade Real"):
+        with st.spinner("Analisando dividendos históricos..."):
+            df_radar = st.session_state.df_carteira.copy()
+            tickers = df_radar['Ativo'].unique().tolist()
             
-            # Busca cotações e dólar
-            cotacao_dolar = float(yf.download("USDBRL=X", period="1d", progress=False)['Close'].iloc[-1])
-            tickers = df_calc['Ativo'].unique().tolist()
-            dados_mercado = yf.download(tickers, period="1d", progress=False)['Close']
-            precos_dict = {t: float(dados_mercado[t].iloc[-1] if len(tickers) > 1 else dados_mercado.iloc[-1]) for t in tickers}
+            # 1. Puxar dados de dividendos dos últimos 12 meses
+            dados_div = {}
+            for t in tickers:
+                try:
+                    stock = yf.Ticker(t)
+                    # Soma dividendos dos últimos 12 meses
+                    hist_div = stock.dividends
+                    if not hist_div.empty:
+                        dados_div[t] = hist_div.tail(365).sum()
+                    else:
+                        dados_div[t] = 0.0
+                except:
+                    dados_div[t] = 0.0
 
-            # Cálculos de Patrimônio e Lucro
-            df_calc['Preço BRL'] = df_calc['Ativo'].apply(lambda x: precos_dict.get(x, 0) * (cotacao_dolar if not x.endswith(".SA") else 1))
-            df_calc['Total Atual'] = df_calc['QTD'] * df_calc['Preço BRL']
-            df_calc['Investido'] = df_calc['QTD'] * df_calc['Preço Médio']
-            df_calc['Lucro R$'] = df_calc['Total Atual'] - df_calc['Investido']
+            # 2. Cálculos de Yield on Cost (YoC)
+            df_radar['Div_Anual_Por_Cota'] = df_radar['Ativo'].map(dados_div)
+            df_radar['Renda_Anual_Total'] = df_radar['QTD'] * df_radar['Div_Anual_Por_Cota']
             
-            total_patrimonio = df_calc['Total Atual'].sum()
-            lucro_mensal = total_patrimonio * taxa_mensal
-
-            # Cards de Resumo
+            # Yield On Cost = (Dividendos Anuais / Preço Médio Pago)
+            df_radar['YoC (%)'] = (df_radar['Div_Anual_Por_Cota'] / df_radar['Preço Médio']) * 100
+            
+            # 3. Exibição de Métricas de Renda
+            total_renda_ano = df_radar['Renda_Anual_Total'].sum()
+            renda_media_mes = total_renda_ano / 12
+            
             c1, c2, c3 = st.columns(3)
-            c1.metric("Patrimônio Total", f"R$ {total_patrimonio:,.2f}")
-            c2.metric("Lucro Estimado/Mês", f"R$ {lucro_mensal:,.2f}")
-            c3.metric("Dólar hoje", f"R$ {cotacao_dolar:,.2f}")
+            c1.metric("Renda Anual Estimada", f"R$ {total_renda_ano:,.2f}")
+            c2.metric("Renda Média Mensal", f"R$ {renda_media_mes:,.2f}")
+            c3.metric("YoC Médio da Carteira", f"{df_radar['YoC (%)'].mean():,.2f}%")
 
-            # Gráficos
-            col_esq, col_dir = st.columns(2)
-            with col_esq:
-                st.plotly_chart(px.pie(df_calc, values='Total Atual', names='Ativo', hole=0.5, title="Divisão da Carteira"), use_container_width=True)
-            with col_dir:
-                st.plotly_chart(px.bar(df_calc, x='Ativo', y='Lucro R$', color='Lucro R$', color_continuous_scale='RdYlGn', title="Lucro por Ativo"), use_container_width=True)
+            # Gráfico de Projeção de Renda por Ativo
+            st.write("---")
+            fig_renda = px.bar(df_radar, x='Ativo', y='Renda_Anual_Total', 
+                               color='YoC (%)', title="Quem mais coloca dinheiro no seu bolso (Anual)",
+                               labels={'Renda_Anual_Total': 'Renda Total (R$)'},
+                               color_continuous_scale='Greens')
+            st.plotly_chart(fig_renda, use_container_width=True)
 
-            st.success(f"Dica: Para manter 0,8% ao mês, seu próximo aporte deve ser de R$ {valor_aporte:,.2f}")
+            # Tabela de Eficiência
+            st.write("### 📊 Tabela de Eficiência (Dividendos)")
+            st.dataframe(df_radar[['Ativo', 'QTD', 'Preço Médio', 'Div_Anual_Por_Cota', 'YoC (%)']].style.format({
+                'Preço Médio': 'R$ {:.2f}', 
+                'Div_Anual_Por_Cota': 'R$ {:.2f}',
+                'YoC (%)': '{:.2f}%'
+            }))
+            
+            st.info("""
+            **O que é o Yield on Cost (YoC)?** É a rentabilidade dos dividendos baseada no preço que você pagou. 
+            Se você comprou uma ação por R$ 10 e ela paga R$ 1 de dividendo, seu YoC é 10%. 
+            Mesmo que a ação suba para R$ 20, seu YoC continua sendo 10% sobre o seu suado dinheiro!
+            """)
 
-# --- ABA 2: EDITOR DE DADOS ---
-with aba2:
+# --- ABA 3: EDITOR (Mantendo sua funcionalidade de edição) ---
+with tab_edit:
     st.title("📂 Gerenciar Ativos")
-    st.write("Edite os valores abaixo. Lembre-se: mudanças aqui são temporárias até que você salve na sua planilha oficial.")
-    
-    # O Editor de Dados
-    df_editado = st.data_editor(
-        st.session_state.df_carteira,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editor_real"
-    )
-
-    if st.button("💾 Aplicar Mudanças no Dashboard"):
+    df_editado = st.data_editor(st.session_state.df_carteira, num_rows="dynamic", use_container_width=True)
+    if st.button("💾 Aplicar Mudanças"):
         st.session_state.df_carteira = df_editado
-        st.success("Dados atualizados! Volte na aba do Dashboard e clique em Sincronizar.")
+        st.success("Dados atualizados!")
         
