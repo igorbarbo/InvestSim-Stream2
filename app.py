@@ -1,4 +1,4 @@
-  import streamlit as st
+import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.express as px
@@ -72,7 +72,7 @@ with tab_risco:
     st.subheader("⚠️ Concentração")
     df_risco = st.session_state.df_carteira.copy()
     if not df_risco.empty:
-        st.plotly_chart(px.bar(df_risco, x='Ativo', y='QTD', template="plotly_dark").update_traces(marker_color='#00a3ff'), use_container_width=True)
+        st.plotly_chart(px.bar(df_risco, x='Ativo', y='QTD', title="Quantidade por Ativo", template="plotly_dark").update_traces(marker_color='#00a3ff'), use_container_width=True)
 
 with tab_val:
     st.subheader("⚖️ Valuation")
@@ -80,60 +80,54 @@ with tab_val:
     st.data_editor(df_val[['Ativo', 'Preço Médio']], use_container_width=True)
 
 with tab_proj:
-    st.title("🚀 Projeção Mensal Detalhada")
+    st.title("🚀 Projeção e Impostos")
     
-    col_input1, col_input2 = st.columns(2)
-    with col_input1:
+    col_in1, col_in2 = st.columns(2)
+    with col_in1:
         v_aporte = st.number_input("Aporte Mensal (R$):", value=3000)
         v_anos = st.slider("Tempo (Anos):", 1, 40, 10)
-    with col_input2:
+    with col_in2:
         v_taxa = st.slider("Juros Anual (%):", 1.0, 20.0, 10.0)
         v_aliq = st.selectbox("Imposto sobre Lucro (%):", [15, 17.5, 20, 22.5], index=0)
 
-    # Lógica da Bola de Neve Mês a Mês
+    # Cálculo Mensal
     meses = v_anos * 12
     r_mensal = (1 + v_taxa/100)**(1/12) - 1
     
     dados_mensais = []
     saldo_anterior = 0
-    total_investido = 0
+    investido_total = 0
     
     for mes in range(1, meses + 1):
-        juros_mes = saldo_anterior * r_mensal
-        total_investido += v_aporte
-        saldo_atual = saldo_anterior + v_aporte + juros_mes
+        juros_ganho = saldo_anterior * r_mensal
+        investido_total += v_aporte
+        saldo_atual = saldo_anterior + v_aporte + juros_ganho
         dados_mensais.append({
             "Mês": mes,
-            "Aporte Mensal": v_aporte,
-            "Juros do Mês": juros_mes,
-            "Saldo Acumulado": saldo_atual
+            "Juros do Mês": juros_ganho,
+            "Saldo Bruto": saldo_atual
         })
         saldo_anterior = saldo_atual
 
-    df_proj = pd.DataFrame(dados_mensais)
-    
-    # Métricas Finais
-    acumulado_bruto = df_proj["Saldo Acumulado"].iloc[-1]
-    lucro_bruto = acumulado_bruto - total_investido
-    valor_imposto = lucro_bruto * (v_aliq / 100)
-    acumulado_liquido = acumulado_bruto - valor_imposto
+    df_res = pd.DataFrame(dados_mensais)
+    final_bruto = df_res["Saldo Bruto"].iloc[-1]
+    lucro = final_bruto - investido_total
+    imposto = lucro * (v_aliq / 100)
+    final_liquido = final_bruto - imposto
 
     st.markdown("---")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("BRUTO FINAL", f"R$ {acumulado_bruto:,.2f}")
-    c2.metric("IMPOSTO", f"R$ {valor_imposto:,.2f}", delta=f"-{v_aliq}%", delta_color="inverse")
-    c3.metric("LÍQUIDO", f"R$ {acumulado_liquido:,.2f}")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("BRUTO", f"R$ {final_bruto:,.2f}")
+    m2.metric("IMPOSTO", f"R$ {imposto:,.2f}", delta_color="inverse")
+    m3.metric("LÍQUIDO", f"R$ {final_liquido:,.2f}")
 
-    # Gráfico
-    st.plotly_chart(px.area(df_proj, x="Mês", y="Saldo Acumulado", title="Curva de Crescimento", template="plotly_dark").update_traces(line_color='#00ff88'), use_container_width=True)
+    st.plotly_chart(px.area(df_res, x="Mês", y="Saldo Bruto", template="plotly_dark").update_traces(line_color='#00ff88'), use_container_width=True)
 
-    # TABELA DETALHADA MÊS A MÊS
-    st.subheader("📋 Tabela Mensal de Rendimentos")
-    st.write("Veja quanto você ganha de juros em cada mês:")
-    df_visual = df_proj.copy()
-    df_visual["Juros do Mês"] = df_visual["Juros do Mês"].map("R$ {:,.2f}".format)
-    df_visual["Saldo Acumulado"] = df_visual["Saldo Acumulado"].map("R$ {:,.2f}".format)
-    st.dataframe(df_visual, use_container_width=True)
+    st.subheader("📋 Detalhamento dos Juros Mensais")
+    df_vis = df_res.copy()
+    df_vis["Juros do Mês"] = df_vis["Juros do Mês"].map("R$ {:,.2f}".format)
+    df_vis["Saldo Bruto"] = df_vis["Saldo Bruto"].map("R$ {:,.2f}".format)
+    st.dataframe(df_vis, use_container_width=True)
 
 with tab_edit:
     st.subheader("📂 Gerenciar")
@@ -141,3 +135,4 @@ with tab_edit:
     if st.button("🚪 SAIR"):
         st.session_state.logado = False
         st.rerun()
+      
