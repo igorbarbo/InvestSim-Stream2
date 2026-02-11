@@ -75,36 +75,45 @@ with tab_risco:
         fig_risco = px.bar(df_risco, x='Ativo', y='QTD', template="plotly_dark")
         fig_risco.update_traces(marker_color='#00a3ff')
         st.plotly_chart(fig_risco, use_container_width=True)
-        st.info("💡 Diversificar reduz perdas. Tente não ter mais de 15% em um único ativo.")
 
 with tab_val:
-    st.subheader("⚖️ Análise de Preço Justo (Graham)")
-    st.write("Cálculo baseado na fórmula de Benjamin Graham: $\sqrt{22.5 \times VPA \times LPA}$")
-    # Nota: No seu caso, como estamos usando Sheets simples, você pode inserir o Preço Justo manualmente na planilha ou usar esta estimativa visual:
+    st.subheader("⚖️ Análise de Preço Justo")
     df_val = st.session_state.df_carteira.copy()
-    st.warning("Para análise real, compare o seu 'Preço Médio' com o 'Preço Atual' no Dashboard.")
     st.data_editor(df_val[['Ativo', 'Preço Médio']], use_container_width=True)
 
 with tab_proj:
-    st.title("🚀 Projeção Bola de Neve")
-    v_aporte = st.number_input("Aporte Mensal (R$):", value=3000)
-    v_anos = st.slider("Tempo (Anos):", 1, 40, 10)
-    v_taxa = st.slider("Juros Anual (%):", 1.0, 20.0, 10.0)
-    v_yield = st.slider("Rendimento Mensal (%):", 0.1, 2.0, 0.8)
+    st.title("🚀 Projeção e Impostos")
+    
+    col_input1, col_input2 = st.columns(2)
+    with col_input1:
+        v_aporte = st.number_input("Aporte Mensal (R$):", value=3000)
+        v_anos = st.slider("Tempo (Anos):", 1, 40, 10)
+    with col_input2:
+        v_taxa = st.slider("Juros Anual (%):", 1.0, 20.0, 10.0)
+        v_aliq = st.selectbox("Alíquota de Imposto (%):", [15, 17.5, 20, 22.5], index=0)
 
+    # Cálculos Matemáticos
     meses = v_anos * 12
     r = (1 + v_taxa/100)**(1/12) - 1
-    acumulado = v_aporte * (((1 + r)**meses - 1) / r)
-    renda = acumulado * (v_yield / 100)
+    total_investido = v_aporte * meses
+    acumulado_bruto = v_aporte * (((1 + r)**meses - 1) / r)
+    
+    lucro_bruto = acumulado_bruto - total_investido
+    valor_imposto = lucro_bruto * (v_aliq / 100)
+    acumulado_liquido = acumulado_bruto - valor_imposto
 
     st.markdown("---")
-    c1, c2 = st.columns(2)
-    c1.metric("TOTAL ACUMULADO", f"R$ {acumulado:,.2f}")
-    c2.metric("RENDA POR MÊS", f"R$ {renda:,.2f}")
-    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("TOTAL BRUTO", f"R$ {acumulado_bruto:,.2f}")
+    c2.metric("IMPOSTO ESTIMADO", f"R$ {valor_imposto:,.2f}", delta=f"-{v_aliq}%", delta_color="inverse")
+    c3.metric("VALOR LÍQUIDO", f"R$ {acumulado_liquido:,.2f}")
+
+    st.warning(f"📉 O Leão levaria aproximadamente **R$ {valor_imposto:,.2f}** do seu lucro total.")
+
+    # Gráfico
     eixo_x = list(range(1, meses + 1))
     eixo_y = [v_aporte * (((1 + r)**i - 1) / r) for i in eixo_x]
-    st.plotly_chart(px.area(x=eixo_x, y=eixo_y, template="plotly_dark").update_traces(line_color='#00ff88'), use_container_width=True)
+    st.plotly_chart(px.area(x=eixo_x, y=eixo_y, title="Crescimento Bruto", template="plotly_dark").update_traces(line_color='#00ff88'), use_container_width=True)
 
 with tab_edit:
     st.subheader("📂 Gerenciar Dados")
