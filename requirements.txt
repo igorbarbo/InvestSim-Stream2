@@ -1,6 +1,6 @@
 streamlit
 pandas
 yfinance
-plotly
-numpy
 google-generativeai
+plotly
+matplotlib
