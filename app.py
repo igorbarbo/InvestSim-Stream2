@@ -4,7 +4,7 @@ from datetime import datetime
 import sys
 import os
 
-# --- BLINDAGEM DE CAMINHO (Resolve o ImportError) ---
+# Força o Python a enxergar a pasta src
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
@@ -12,78 +12,64 @@ try:
     from src.analytics import process_metrics
     from src.ai_agent import ask_ai
 except ImportError as e:
-    st.error(f"Erro de Módulo: {e}. Verifique se a pasta 'src' e o arquivo '__init__.py' existem.")
+    st.error(f"Erro de Módulo: {e}")
     st.stop()
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Terminal Igorbarbo Pro", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Terminal Igorbarbo V5", layout="wide", page_icon="⚡")
 
-# Estilo CSS para Cards Neon e Esconder Menu Lateral (Reforço)
+# CSS para visual Moderno
 st.markdown("""
     <style>
         [data-testid="stMetricValue"] { font-size: 28px; color: #00ff88; }
-        .main { background-color: #0e1117; }
-        div[data-testid="stExpander"] { border: 1px solid #262730; }
+        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+        .stTabs [data-baseweb="tab"] { background-color: #11151c; border-radius: 5px; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- CABEÇALHO ---
-st.title("⚡ Terminal Igorbarbo | Enterprise")
+st.title("⚡ Terminal Igorbarbo | V5 Pro")
 st.markdown("---")
 
-# --- LÓGICA DE DADOS ---
 df_raw = fetch_data()
 
 if df_raw is not None:
-    # Auto-Sincronização: Se não tem dados no estado, busca agora
     if "df_p" not in st.session_state:
-        with st.spinner("🚀 Sincronizando com a B3..."):
+        with st.spinner("🔄 Sincronizando Mercado..."):
             st.session_state.df_p = sync_prices(df_raw)
             st.session_state.last_sync = datetime.now().strftime("%H:%M:%S")
 
-    # Se a sincronização deu certo, mostra o Dashboard
     if st.session_state.df_p is not None:
         df, rent_real, total = process_metrics(st.session_state.df_p)
 
-        # MÉTRICAS PRINCIPAIS (Cards)
         c1, c2, c3 = st.columns(3)
         c1.metric("PATRIMÔNIO TOTAL", f"R$ {total:,.2f}")
         c2.metric("RENTABILIDADE REAL (MWA)", f"{rent_real:.2f}%")
-        c3.metric("ÚLTIMA SINCRONIZAÇÃO", st.session_state.last_sync)
+        c3.metric("STATUS", "CONECTADO", delta=st.session_state.last_sync)
 
-        # ABAS DO SISTEMA
-        tab1, tab2, tab3 = st.tabs(["📊 PERFORMANCE", "🤖 IA ADVISOR", "🎯 PRIORIDADES"])
+        tab1, tab2, tab3 = st.tabs(["📊 PERFORMANCE", "🤖 IA ADVISOR V5", "🎯 RADAR"])
 
         with tab1:
-            st.subheader("Mapa de Calor do Patrimônio")
-            fig = px.treemap(df, path=[px.Constant("Carteira"), 'Ativo'], values='Patrimônio',
+            fig = px.treemap(df, path=['Ativo'], values='Patrimônio',
                              color='Valorização %', color_continuous_scale='RdYlGn',
                              color_continuous_midpoint=0)
-            fig.update_layout(margin=dict(t=10, l=10, r=10, b=10))
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            st.subheader("💬 Consultoria Estratégica")
-            pergunta = st.chat_input("Dúvida sobre a alocação?")
+            st.subheader("💬 Inteligência Gemini 2.0")
+            pergunta = st.chat_input("Ex: Por que PETR4 está caindo hoje?")
             if pergunta:
-                with st.spinner("Analisando dados..."):
+                with st.spinner("Consultando dados e Google Search..."):
                     resposta = ask_ai(pergunta, df)
-                    st.info(f"**Pergunta:** {pergunta}")
+                    st.markdown(f"> **Igor:** {pergunta}")
                     st.write(resposta)
 
         with tab3:
-            st.subheader("⚖️ Radar de Aporte")
-            st.write("Ativos com maior **Prioridade** são aqueles que estão baratos (queda) e com pouco peso na carteira.")
-            df_sort = df[['Ativo', 'Valorização %', 'Peso', 'Prioridade']].sort_values(by='Prioridade', ascending=False)
-            st.dataframe(df_sort.style.background_gradient(subset=['Prioridade'], cmap='Greens'), use_container_width=True)
+            st.subheader("⚖️ Prioridades de Aporte")
+            st.dataframe(df[['Ativo', 'Valorização %', 'Peso', 'Prioridade']].sort_values('Prioridade', ascending=False).style.background_gradient(cmap='Greens', subset=['Prioridade']), use_container_width=True)
             
-    else:
-        st.error("Erro ao sincronizar preços do Yahoo Finance. Tente novamente em instantes.")
 else:
-    st.error("❌ Erro: Não foi possível ler a planilha do Google Sheets.")
+    st.warning("Aguardando conexão com Google Sheets...")
 
-# --- FOOTER ---
-if st.button("🔄 Forçar Atualização"):
+if st.sidebar.button("Forçar Refresh"):
     st.session_state.clear()
     st.rerun()
     
