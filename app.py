@@ -1,4 +1,4 @@
-import streamlit as st
+  import streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.express as px
@@ -69,20 +69,18 @@ with tab_dash:
             st.plotly_chart(px.pie(df, values='Patrimônio', names='Ativo', hole=0.5, template="plotly_dark"), use_container_width=True)
 
 with tab_risco:
-    st.subheader("⚠️ Concentração por Ativo")
+    st.subheader("⚠️ Concentração")
     df_risco = st.session_state.df_carteira.copy()
     if not df_risco.empty:
-        fig_risco = px.bar(df_risco, x='Ativo', y='QTD', template="plotly_dark")
-        fig_risco.update_traces(marker_color='#00a3ff')
-        st.plotly_chart(fig_risco, use_container_width=True)
+        st.plotly_chart(px.bar(df_risco, x='Ativo', y='QTD', template="plotly_dark").update_traces(marker_color='#00a3ff'), use_container_width=True)
 
 with tab_val:
-    st.subheader("⚖️ Análise de Preço Justo")
+    st.subheader("⚖️ Valuation")
     df_val = st.session_state.df_carteira.copy()
     st.data_editor(df_val[['Ativo', 'Preço Médio']], use_container_width=True)
 
 with tab_proj:
-    st.title("🚀 Projeção e Impostos")
+    st.title("🚀 Projeção Mensal Detalhada")
     
     col_input1, col_input2 = st.columns(2)
     with col_input1:
@@ -90,35 +88,56 @@ with tab_proj:
         v_anos = st.slider("Tempo (Anos):", 1, 40, 10)
     with col_input2:
         v_taxa = st.slider("Juros Anual (%):", 1.0, 20.0, 10.0)
-        v_aliq = st.selectbox("Alíquota de Imposto (%):", [15, 17.5, 20, 22.5], index=0)
+        v_aliq = st.selectbox("Imposto sobre Lucro (%):", [15, 17.5, 20, 22.5], index=0)
 
-    # Cálculos Matemáticos
+    # Lógica da Bola de Neve Mês a Mês
     meses = v_anos * 12
-    r = (1 + v_taxa/100)**(1/12) - 1
-    total_investido = v_aporte * meses
-    acumulado_bruto = v_aporte * (((1 + r)**meses - 1) / r)
+    r_mensal = (1 + v_taxa/100)**(1/12) - 1
     
+    dados_mensais = []
+    saldo_anterior = 0
+    total_investido = 0
+    
+    for mes in range(1, meses + 1):
+        juros_mes = saldo_anterior * r_mensal
+        total_investido += v_aporte
+        saldo_atual = saldo_anterior + v_aporte + juros_mes
+        dados_mensais.append({
+            "Mês": mes,
+            "Aporte Mensal": v_aporte,
+            "Juros do Mês": juros_mes,
+            "Saldo Acumulado": saldo_atual
+        })
+        saldo_anterior = saldo_atual
+
+    df_proj = pd.DataFrame(dados_mensais)
+    
+    # Métricas Finais
+    acumulado_bruto = df_proj["Saldo Acumulado"].iloc[-1]
     lucro_bruto = acumulado_bruto - total_investido
     valor_imposto = lucro_bruto * (v_aliq / 100)
     acumulado_liquido = acumulado_bruto - valor_imposto
 
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
-    c1.metric("TOTAL BRUTO", f"R$ {acumulado_bruto:,.2f}")
-    c2.metric("IMPOSTO ESTIMADO", f"R$ {valor_imposto:,.2f}", delta=f"-{v_aliq}%", delta_color="inverse")
-    c3.metric("VALOR LÍQUIDO", f"R$ {acumulado_liquido:,.2f}")
-
-    st.warning(f"📉 O Leão levaria aproximadamente **R$ {valor_imposto:,.2f}** do seu lucro total.")
+    c1.metric("BRUTO FINAL", f"R$ {acumulado_bruto:,.2f}")
+    c2.metric("IMPOSTO", f"R$ {valor_imposto:,.2f}", delta=f"-{v_aliq}%", delta_color="inverse")
+    c3.metric("LÍQUIDO", f"R$ {acumulado_liquido:,.2f}")
 
     # Gráfico
-    eixo_x = list(range(1, meses + 1))
-    eixo_y = [v_aporte * (((1 + r)**i - 1) / r) for i in eixo_x]
-    st.plotly_chart(px.area(x=eixo_x, y=eixo_y, title="Crescimento Bruto", template="plotly_dark").update_traces(line_color='#00ff88'), use_container_width=True)
+    st.plotly_chart(px.area(df_proj, x="Mês", y="Saldo Acumulado", title="Curva de Crescimento", template="plotly_dark").update_traces(line_color='#00ff88'), use_container_width=True)
+
+    # TABELA DETALHADA MÊS A MÊS
+    st.subheader("📋 Tabela Mensal de Rendimentos")
+    st.write("Veja quanto você ganha de juros em cada mês:")
+    df_visual = df_proj.copy()
+    df_visual["Juros do Mês"] = df_visual["Juros do Mês"].map("R$ {:,.2f}".format)
+    df_visual["Saldo Acumulado"] = df_visual["Saldo Acumulado"].map("R$ {:,.2f}".format)
+    st.dataframe(df_visual, use_container_width=True)
 
 with tab_edit:
-    st.subheader("📂 Gerenciar Dados")
+    st.subheader("📂 Gerenciar")
     st.data_editor(st.session_state.df_carteira, use_container_width=True)
     if st.button("🚪 SAIR"):
         st.session_state.logado = False
         st.rerun()
-        
