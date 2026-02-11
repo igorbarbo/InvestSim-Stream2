@@ -1,28 +1,34 @@
 import pandas as pd
+import yfinance as yf
 
 def process_metrics(df):
-    """
-    Motor Financeiro de Precisão: Calcula métricas ponderadas pelo patrimônio.
-    """
-    # 1. Cálculos Básicos
+    """Calcula rentabilidade ponderada (MWA) e motor decisional."""
     df['Preço Atual'] = pd.to_numeric(df['Preço Atual'], errors='coerce')
+    df['Preço Médio'] = pd.to_numeric(df['Preço Médio'], errors='coerce')
     df['Patrimônio'] = df['QTD'] * df['Preço Atual']
     
-    # 2. Rentabilidade Individual Ponderada
-    # (Preço Atual / Preço Médio - 1) * 100
     df['Valorização %'] = (df['Preço Atual'] / df['Preço Médio'] - 1) * 100
     
-    # 3. Métricas Consolidadas (O Pulo do Gato para nota 9,5)
     total_patrimonio = df['Patrimônio'].sum()
     
-    # Rentabilidade Real da Carteira (Ponderada pelo peso de cada ativo)
-    # Fórmula: Soma(Valorizacao_Ativo * Peso_do_Ativo)
-    rentabilidade_ponderada = (df['Valorização %'] * df['Patrimônio']).sum() / total_patrimonio
+    if total_patrimonio > 0:
+        # Rentabilidade Ponderada (Real)
+        rentabilidade_mwa = (df['Valorização %'] * df['Patrimônio']).sum() / total_patrimonio
+        df['Peso'] = (df['Patrimônio'] / total_patrimonio) * 100
+    else:
+        rentabilidade_mwa = 0
+        df['Peso'] = 0
+
+    # Motor de Prioridade: Queda alta + Peso baixo = Prioridade Máxima
+    df['Prioridade'] = (df['Valorização %'] * -0.6) + ((100 - df['Peso']) * 0.4)
     
-    # 4. Cálculo de Prioridade (Motor Decisional Simples)
-    # Dá mais prioridade a quem caiu mais e tem menos peso na carteira
-    df['Peso'] = (df['Patrimônio'] / total_patrimonio) * 100
-    df['Prioridade'] = (df['Valorização %'] * -1) + (100 - df['Peso'])
-    
-    return df, rentabilidade_ponderada, total_patrimonio
-    
+    return df, rentabilidade_mwa, total_patrimonio
+
+def convert_to_usd(valor_brl):
+    """Converte BRL para USD usando cotação em tempo real."""
+    try:
+        usd_ticker = yf.Ticker("USDBRL=X")
+        cotacao = usd_ticker.fast_info['last_price']
+        return valor_brl / cotacao
+    except:
+        return valor_brl / 5.60 # Fallback 2026
