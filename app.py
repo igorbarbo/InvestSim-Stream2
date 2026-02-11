@@ -1,106 +1,67 @@
 import streamlit as st
-import pandas as pd
-import yfinance as yf
 import plotly.express as px
-import google.generativeai as genai
+from datetime import datetime
 
-# --- 1. CONFIGURAÇÃO DA CHAVE ---
-API_KEY = "AIzaSyAXfzbC-9RGpQgafSG-86AMGK-2AgtOQCU" 
+# IMPORTANDO SEUS MÓDULOS DA PASTA SRC
+from src.data_engine import fetch_data, sync_prices
+from src.analytics import process_metrics
+from src.ai_agent import ask_ai
 
-try:
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash', tools=[{'google_search_grounding': {}}])
-    IA_ATIVA = True
-except:
-    IA_ATIVA = False
+# 1. CONFIGURAÇÃO DE TELA E STATUS
+st.set_page_config(page_title="Terminal Igorbarbo Pro", layout="wide", page_icon="⚡")
 
-# --- 2. CONFIGURAÇÃO DE ESTILO (CORRIGIDO) ---
-st.set_page_config(page_title="Terminal Igorbarbo | Expert", layout="wide", page_icon="⚡")
+st.markdown(f"""
+    <div style="background:#11151c; padding:10px; border-radius:10px; border-left:5px solid #00ff88; margin-bottom:20px;">
+        <small style="color:#888;">STATUS DO SISTEMA</small><br>
+        <b>MODO:</b> Enterprise (Modular) | <b>MÉTRICA:</b> Média Ponderada pelo Patrimônio
+    </div>
+""", unsafe_allow_html=True)
 
-st.markdown("""
-    <style>
-        .stApp { background-color: #020408; color: #e0e0e0; }
-        [data-testid="stMetric"] { 
-            background: rgba(17, 21, 28, 0.7); 
-            padding: 20px; border-radius: 15px; border: 1px solid #00ff8833;
-            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.1);
-        }
-        .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-        .stTabs [data-baseweb="tab"] {
-            background-color: #11151c; border-radius: 10px 10px 0 0; padding: 10px 20px;
-        }
-    </style>
-""", unsafe_allow_html=True) # <-- O erro estava aqui e foi corrigido!
+# 2. CARREGAMENTO INICIAL
+df_raw = fetch_data()
 
-# --- 3. CARREGAMENTO DE DADOS ---
-@st.cache_data(ttl=300)
-def carregar_dados():
-    try:
-        url = "https://docs.google.com/spreadsheets/d/1TWfuEvIn9YbSzEyFHKvWWD4XwppHhlj9Cm1RE6BweF8/gviz/tq?tqx=out:csv"
-        df = pd.read_csv(url)
-        df.columns = [c.strip() for c in df.columns]
-        return df.dropna(subset=['Ativo'])
-    except:
-        return pd.DataFrame()
+if df_raw is not None:
+    # Botão de Sincronização
+    if st.button("🚀 SINCRONIZAR COM A BOLSA"):
+        with st.spinner("Buscando preços em tempo real..."):
+            st.session_state.df_p = sync_prices(df_raw)
+            st.session_state.last_sync = datetime.now().strftime("%H:%M:%S")
 
-df_base = carregar_dados()
+    # 3. INTERFACE PRINCIPAL (SÓ APARECE APÓS SINCRONIZAR)
+    if "df_p" in st.session_state:
+        # PROCESSA A INTELIGÊNCIA QUANTITATIVA
+        df, rent_real, total = process_metrics(st.session_state.df_p)
 
-# --- 4. INTERFACE ---
-st.title("⚡ Terminal Igorbarbo | Expert Edition")
+        tab1, tab2, tab3 = st.tabs(["📊 PERFORMANCE REAL", "🧠 IA ADVISOR", "⚖️ PRIORIDADES"])
 
-tab_dash, tab_ai, tab_radar = st.tabs(["📊 DASHBOARD", "🧠 ANALISTA IA EXPERT", "🎯 RADAR & CALOR"])
+        with tab1:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("PATRIMÔNIO TOTAL", f"R$ {total:,.2f}")
+            c2.metric("RENTABILIDADE REAL (PONDERADA)", f"{rent_real:.2f}%")
+            c3.metric("ÚLTIMA ATUALIZAÇÃO", st.session_state.last_sync)
 
-with tab_dash:
-    if st.button("🚀 SINCRONIZAR MERCADO EM TEMPO REAL"):
-        with st.spinner("Conectando aos servidores da Bolsa..."):
-            try:
-                tickers = df_base['Ativo'].unique().tolist()
-                dolar = float(yf.download("USDBRL=X", period="1d", progress=False)['Close'].iloc[-1])
-                precos = yf.download(tickers, period="1d", progress=False)['Close']
-                
-                p_dict = {t: float(precos[t].iloc[-1] if len(tickers) > 1 else precos.iloc[-1]) for t in tickers}
-                
-                df_base['Preço Atual'] = df_base['Ativo'].map(p_dict)
-                df_base['Patrimônio'] = df_base['QTD'] * df_base['Preço Atual']
-                df_base['YOC %'] = (df_base['Preço Atual'] / df_base['Preço Médio'] - 1) * 100
-                
-                st.session_state['df_p'] = df_base
-                st.session_state['dolar'] = dolar
-                st.success("Tudo atualizado!")
-            except Exception as e:
-                st.error(f"Erro na sincronização: {e}")
+            # Gráfico Profissional
+            fig = px.treemap(df, path=[px.Constant("Carteira"), 'Ativo'], values='Patrimônio',
+                             color='Valorização %', color_continuous_scale='RdYlGn',
+                             color_continuous_midpoint=0)
+            st.plotly_chart(fig, use_container_width=True)
 
-    if 'df_p' in st.session_state:
-        df_p = st.session_state['df_p']
-        c1, c2, c3 = st.columns(3)
-        c1.metric("PATRIMÔNIO TOTAL", f"R$ {df_p['Patrimônio'].sum():,.2f}")
-        c2.metric("LUCRO MÉDIO (YOC)", f"{df_p['YOC %'].mean():.2f}%")
-        c3.metric("DÓLAR HOJE", f"R$ {st.session_state['dolar']:.2f}")
-        
-        st.plotly_chart(px.pie(df_p, values='Patrimônio', names='Ativo', hole=.4, template="plotly_dark"), use_container_width=True)
+        with tab2:
+            st.subheader("💬 Consultor IA Expert")
+            pergunta = st.chat_input("Ex: Qual o risco atual da minha alocação?")
+            if pergunta:
+                with st.spinner("IA analisando sua carteira..."):
+                    resposta = ask_ai(pergunta, df)
+                    st.markdown(f"> {pergunta}")
+                    st.write(resposta)
+
+        with tab3:
+            st.subheader("🎯 Ranking de Aporte (Onde colocar dinheiro?)")
+            st.write("O algoritmo calcula a prioridade baseada na queda do ativo e no peso dele na carteira.")
+            # Mostra o ranking de quem caiu mais e tem menos peso
+            st.dataframe(df[['Ativo', 'Valorização %', 'Peso', 'Prioridade']].sort_values(by='Prioridade', ascending=False), use_container_width=True)
     else:
-        st.info("Aperte o botão acima para carregar sua performance.")
-
-with tab_ai:
-    st.subheader("💬 Consultor IA com Google Search")
+        st.info("Clique no botão 'Sincronizar' acima para carregar os dados do mercado.")
+else:
+    st.error("Não foi possível carregar a planilha. Verifique a URL do Google Sheets.")
     
-    if prompt := st.chat_input("Ex: Quais notícias de hoje impactam minha carteira?"):
-        with st.chat_message("user"): st.write(prompt)
-        with st.chat_message("assistant"):
-            if not IA_ATIVA:
-                st.error("Erro na ativação da IA.")
-            else:
-                ctx = st.session_state.get('df_p', df_base).to_string()
-                res = model.generate_content(f"Investidor: Igor. Carteira: {ctx}\n\nPergunta: {prompt}")
-                st.write(res.text)
-
-with tab_radar:
-    st.subheader("🎯 Mapa de Calor (Heatmap)")
-    if 'df_p' in st.session_state:
-        df_p = st.session_state['df_p']
-        fig = px.treemap(df_p, path=[px.Constant("Minha Carteira"), 'Ativo'], values='Patrimônio', 
-                         color='YOC %', color_continuous_scale='RdYlGn', color_continuous_midpoint=0)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Vá ao Dashboard e sincronize os dados primeiro.")
-        
