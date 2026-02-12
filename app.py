@@ -1,16 +1,15 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
-import google.generativeai as genai
 import gc
 from Modules import db, pdf_report 
 import plotly.express as px
 
-# --- SETUP LUXO & PERFORMANCE ---
+# --- SETUP INICIAL ---
 st.set_page_config(page_title="Igorbarbo V6 Pro", layout="wide")
 db.init_db()
 
-# CSS para Dark Mode Real e Cards Dourados
+# Estilização Private Banking
 st.markdown("""
     <style>
     .stApp { background-color: #05070A; color: white; }
@@ -19,7 +18,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENGINE ---
+# --- FUNÇÕES DE LÓGICA ---
 def run_simulation(df, aporte):
     total_futuro = df['Patrimônio'].sum() + aporte
     objetivo_cada = total_futuro / len(df)
@@ -34,31 +33,37 @@ def run_simulation(df, aporte):
 menu = st.sidebar.radio("MENU PRIVATE", ["🏠 Dashboard", "🎯 Simulador de Aporte", "⚙️ Gestão de Ativos", "📄 Relatório PDF"])
 df_db = db.get_assets()
 
+# --- MOTOR DE PREÇOS GLOBAL (Evita KeyError) ---
+if not df_db.empty:
+    try:
+        tickers = [f"{t}.SA" for t in df_db['ticker']]
+        # Baixa os dados uma única vez para todas as abas
+        prices_data = yf.download(tickers, period="1d", progress=False)['Close']
+        
+        if len(tickers) == 1:
+            df_db['Preço'] = prices_data.iloc[-1]
+        else:
+            last_prices = prices_data.iloc[-1]
+            df_db['Preço'] = df_db['ticker'].apply(lambda x: last_prices.get(f"{x}.SA", 0))
+        
+        df_db['Patrimônio'] = df_db['qtd'] * df_db['Preço']
+    except Exception as e:
+        st.sidebar.error("Erro na conexão com B3. Preços desatualizados.")
+
+# --- RENDERIZAÇÃO DAS ABAS ---
 if menu == "🏠 Dashboard":
     st.title("💎 Wealth Management Dashboard")
     if not df_db.empty:
-        with st.spinner("Sincronizando com a B3..."):
-            tickers = [f"{t}.SA" for t in df_db['ticker']]
-            prices = yf.download(tickers, period="1d", progress=False)['Close']
-            
-            # Tratamento para um ou vários ativos
-            if len(tickers) == 1:
-                last_price = prices.iloc[-1]
-                df_db['Preço'] = last_price
-            else:
-                last_prices = prices.iloc[-1]
-                df_db['Preço'] = df_db['ticker'].apply(lambda x: last_prices.get(f"{x}.SA", 0))
-            
-            df_db['Patrimônio'] = df_db['qtd'] * df_db['Preço']
-        
         c1, c2 = st.columns(2)
-        c1.metric("Patrimônio Total", f"R$ {df_db['Patrimônio'].sum():,.2f}")
+        total_brl = df_db['Patrimônio'].sum()
+        c1.metric("Patrimônio Total", f"R$ {total_brl:,.2f}")
         
-        # Gráfico atualizado para nova versão do Streamlit
         fig = px.pie(df_db, values='Patrimônio', names='ticker', hole=0.5, 
                      color_discrete_sequence=px.colors.sequential.Gold)
-        st.plotly_chart(fig, width='stretch') # Ajuste conforme log
+        st.plotly_chart(fig, width='stretch')
         gc.collect()
+    else:
+        st.info("Bem-vindo! Comece adicionando ativos na aba 'Gestão'.")
 
 elif menu == "🎯 Simulador de Aporte":
     st.title("🎯 Estrategista de Capital")
@@ -66,7 +71,7 @@ elif menu == "🎯 Simulador de Aporte":
     if valor > 0 and not df_db.empty:
         sugestoes = run_simulation(df_db, valor)
         st.table(sugestoes)
-        st.info("💡 A IA prioriza ativos que estão abaixo da média de equilíbrio da sua carteira.")
+        st.info("💡 O algoritmo prioriza ativos que estão abaixo da média de equilíbrio.")
 
 elif menu == "⚙️ Gestão de Ativos":
     st.subheader("🛠️ Cadastro de Ativos")
@@ -77,7 +82,7 @@ elif menu == "⚙️ Gestão de Ativos":
         if st.form_submit_button("Salvar no Banco SQL"):
             if t:
                 db.add_asset(t, q, p)
-                st.success(f"Ativo {t} salvo com sucesso!")
+                st.success(f"Ativo {t} salvo!")
                 st.rerun()
 
 elif menu == "📄 Relatório PDF":
@@ -88,5 +93,5 @@ elif menu == "📄 Relatório PDF":
             pdf_bytes = pdf_report.generate(df_db, total, 0)
             st.download_button("📩 Baixar PDF Private", data=pdf_bytes, file_name="Igorbarbo_Report.pdf")
     else:
-        st.warning("Adicione ativos para gerar o relatório.")
+        st.warning("Sem dados para gerar relatório.")
         
