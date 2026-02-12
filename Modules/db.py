@@ -23,7 +23,7 @@ def get_assets():
 def add_asset(ticker, qtd, pm):
     conn = sqlite3.connect(DB_NAME)
     conn.execute("""INSERT OR REPLACE INTO assets (ticker, qtd, pm, data_alt) 
-                 VALUES (?, ?, ?, ?)""", (ticker.upper(), qtd, pm, datetime.datetime.now()))
+                 VALUES (?, ?, ?, ?)""", (ticker.upper().strip(), qtd, pm, datetime.datetime.now()))
     conn.commit()
     conn.close()
     
