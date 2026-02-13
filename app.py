@@ -1,4 +1,4 @@
-import streamlit as st
+streamlit as st
 import pandas as pd
 import yfinance as yf
 import plotly.express as px
@@ -59,4 +59,4 @@ elif menu == "🎯 Projeção":
     
     st.metric("Patrimônio Estimado", f"R$ {total:,.2f}")
     st.warning(f"Isso renderia aprox. R$ {total * taxa:,.2f} por mês no futuro.")
-    
+
