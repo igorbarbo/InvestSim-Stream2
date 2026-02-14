@@ -100,6 +100,7 @@ if "logado" not in st.session_state:
     st.session_state.logado = False
     st.session_state.confirmacao_exclusao = {}
     st.session_state.etapa_carteira = 1
+    st.session_state.alertas = {}
 
 if not st.session_state.logado:
     st.title("🏛️ Acesso Restrito")
@@ -136,10 +137,10 @@ def pegar_preco(ticker):
         return None, "erro", str(e)
 
 # ============================================
-# FUNÇÕES DE ANÁLISE INTELIGENTE (NOVO)
+# FUNÇÕES DE ANÁLISE INTELIGENTE
 # ============================================
 
-@st.cache_data(ttl=3600)  # Cache de 1 hora para dados históricos
+@st.cache_data(ttl=3600)
 def buscar_dados_historicos(ticker, periodo="5y"):
     """Busca dados históricos do ativo para análise"""
     try:
@@ -149,29 +150,24 @@ def buscar_dados_historicos(ticker, periodo="5y"):
         if hist.empty:
             return None
         
-        # Calcular médias e indicadores
         preco_atual = hist['Close'].iloc[-1]
-        preco_medio_12m = hist['Close'].tail(252).mean()  # Aprox 12 meses
+        preco_medio_12m = hist['Close'].tail(252).mean()
         preco_medio_5y = hist['Close'].mean()
         
-        # Calcular percentis
         percentil_20 = hist['Close'].quantile(0.20)
         percentil_80 = hist['Close'].quantile(0.80)
         
-        # Calcular mínima e máxima
         minimo_5y = hist['Close'].min()
         maximo_5y = hist['Close'].max()
         
-        # Calcular variação anual
         if len(hist) > 252:
             preco_1ano_atras = hist['Close'].iloc[-252] if len(hist) >= 252 else hist['Close'].iloc[0]
             variacao_anual = (preco_atual / preco_1ano_atras - 1) * 100
         else:
             variacao_anual = 0
         
-        # Buscar dividendos (se disponível)
         try:
-            dividendos = acao.dividends.tail(12).mean() * 4  # Média anual
+            dividendos = acao.dividends.tail(12).mean() * 4
             if dividendos > 0 and preco_atual > 0:
                 dy = (dividendos / preco_atual) * 100
             else:
@@ -198,7 +194,6 @@ def buscar_dados_historicos(ticker, periodo="5y"):
 def analisar_preco_ativo(ticker, dados_historicos):
     """
     Analisa se o preço atual está caro ou barato baseado em dados históricos
-    Retorna: (status, mensagem, cor, explicacao, pontuacao)
     """
     if not dados_historicos:
         return "neutro", "🔵 DADOS INSUFICIENTES", "#808080", "Não foi possível buscar dados históricos para análise", 0
@@ -210,51 +205,37 @@ def analisar_preco_ativo(ticker, dados_historicos):
     minimo = dados_historicos['minimo_5y']
     maximo = dados_historicos['maximo_5y']
     
-    # Calcular posição relativa (0 a 100%)
     posicao_relativa = ((preco - minimo) / (maximo - minimo)) * 100 if maximo > minimo else 50
     
-    # Sistema de pontuação (0 = muito barato, 100 = muito caro)
     pontuacao = 0
     motivos = []
-    recomendacoes = []
     
-    # 1. Comparação com média 12 meses
-    if preco < media_12m * 0.85:  # 15% abaixo da média
+    if preco < media_12m * 0.85:
         pontuacao -= 25
         motivos.append("📉 Preço 15% abaixo da média de 12 meses")
-        recomendacoes.append("✅ Ótimo momento para comprar")
-    elif preco < media_12m * 0.9:  # 10% abaixo
+    elif preco < media_12m * 0.9:
         pontuacao -= 20
         motivos.append("📉 Preço 10% abaixo da média de 12 meses")
-        recomendacoes.append("✅ Bom momento para comprar")
     elif preco < media_12m:
         pontuacao -= 10
         motivos.append("📉 Preço abaixo da média de 12 meses")
-        recomendacoes.append("👍 Momento favorável")
-    elif preco > media_12m * 1.15:  # 15% acima
+    elif preco > media_12m * 1.15:
         pontuacao += 25
         motivos.append("📈 Preço 15% acima da média de 12 meses")
-        recomendacoes.append("⏳ Aguarde uma correção")
-    elif preco > media_12m * 1.1:  # 10% acima
+    elif preco > media_12m * 1.1:
         pontuacao += 20
         motivos.append("📈 Preço 10% acima da média de 12 meses")
-        recomendacoes.append("⚠️ Espere melhorar")
     elif preco > media_12m:
         pontuacao += 10
         motivos.append("📈 Preço acima da média de 12 meses")
-        recomendacoes.append("⚖️ Observe com cautela")
     
-    # 2. Comparação com percentis
     if preco < p20:
         pontuacao -= 30
         motivos.append("💰 Entre os 20% preços mais baixos dos últimos 5 anos")
-        recomendacoes.append("🔥 OPORTUNIDADE ÚNICA!")
     elif preco > p80:
         pontuacao += 30
         motivos.append("⚠️ Entre os 20% preços mais altos dos últimos 5 anos")
-        recomendacoes.append("❌ Evite comprar agora")
     
-    # 3. Posição relativa na faixa histórica
     if posicao_relativa < 15:
         pontuacao -= 25
         motivos.append(f"🎯 Próximo da mínima histórica (R$ {minimo:.2f})")
@@ -268,7 +249,6 @@ def analisar_preco_ativo(ticker, dados_historicos):
         pontuacao += 15
         motivos.append(f"📊 Na faixa superior da série histórica")
     
-    # 4. Variação anual
     if dados_historicos['variacao_anual'] < -20:
         pontuacao -= 20
         motivos.append(f"📉 Caiu {dados_historicos['variacao_anual']:.1f}% no último ano")
@@ -282,7 +262,6 @@ def analisar_preco_ativo(ticker, dados_historicos):
         pontuacao += 15
         motivos.append(f"🚀 Subiu {dados_historicos['variacao_anual']:.1f}% no último ano")
     
-    # Determinar status baseado na pontuação
     if pontuacao <= -40:
         status = "oportunidade"
         mensagem = "🔥 OPORTUNIDADE! Muito barato"
@@ -375,7 +354,6 @@ def plotar_grafico_historico(dados_historicos, ticker):
     
     fig = go.Figure()
     
-    # Preço histórico
     fig.add_trace(go.Scatter(
         x=hist.index,
         y=hist['Close'],
@@ -384,7 +362,6 @@ def plotar_grafico_historico(dados_historicos, ticker):
         line=dict(color='#D4AF37', width=2)
     ))
     
-    # Média 12 meses
     fig.add_trace(go.Scatter(
         x=hist.index,
         y=[media_12m] * len(hist),
@@ -393,7 +370,6 @@ def plotar_grafico_historico(dados_historicos, ticker):
         line=dict(color='white', width=1, dash='dash')
     ))
     
-    # Faixa de 20% a 80%
     fig.add_hrect(
         y0=p20, y1=p80,
         fillcolor="green",
@@ -402,7 +378,6 @@ def plotar_grafico_historico(dados_historicos, ticker):
         name="Faixa Normal"
     )
     
-    # Preço atual (linha vermelha se caro, verde se barato)
     cor_status = "#00FF00" if preco_atual < media_12m else "#FF4444"
     fig.add_hline(
         y=preco_atual,
@@ -525,13 +500,12 @@ if menu == "🏠 Dashboard":
         st.info("💡 Ou use o assistente 'Montar Carteira' para começar do zero!")
 
 # ============================================
-# 2. ASSISTENTE DE CARTEIRA INTELIGENTE (NOVO)
+# 2. ASSISTENTE DE CARTEIRA INTELIGENTE (CORRIGIDO)
 # ============================================
 elif menu == "🎯 Montar Carteira":
     st.title("🎯 Assistente Inteligente de Carteira")
     st.markdown("### Meta: Rentabilidade de **8% a 12% ao ano**")
     
-    # Inicializar estado
     if 'etapa_carteira' not in st.session_state:
         st.session_state.etapa_carteira = 1
     
@@ -545,4 +519,27 @@ elif menu == "🎯 Montar Carteira":
         with col1:
             valor = st.number_input("💰 Quanto quer investir? (R$)", 
                                    min_value=100.0, 
- 
+                                   value=1000.0, 
+                                   step=500.0,
+                                   help="Valor total disponível para investir agora")
+            
+            perfil = st.selectbox("🎲 Seu perfil de investidor",
+                                 ["Conservador", "Moderado", "Arrojado"],
+                                 help="Conservador: prioriza segurança | Moderado: equilíbrio | Arrojado: busca retorno")
+        
+        with col2:
+            prazo = st.selectbox("⏱️ Prazo do investimento",
+                                ["Curto (1-2 anos)", 
+                                 "Médio (3-5 anos)", 
+                                 "Longo (5+ anos)"])
+            
+            objetivo = st.selectbox("🎯 Objetivo principal",
+                                   ["Crescimento patrimonial",
+                                    "Geração de renda mensal",
+                                    "Proteção contra inflação"])
+        
+        if st.button("✅ Próximo: Ver alocação ideal", use_container_width=True):
+            st.session_state.valor_investir = valor
+            st.session_state.perfil_usuario = perfil
+            st.session_state.prazo_usuario = prazo
+            st.session_state.objetivo_usuar
