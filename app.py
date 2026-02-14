@@ -192,6 +192,9 @@ if menu == "🏠 Dashboard":
         st.info("💡 Ou use o assistente 'Montar Carteira' para começar do zero!")# ============================================
 # 2. ASSISTENTE DE CARTEIRA INTELIGENTE
 # ============================================
+# ============================================
+# 2. ASSISTENTE DE CARTEIRA INTELIGENTE
+# ============================================
 elif menu == "🎯 Montar Carteira":
     st.title("🎯 Assistente Inteligente de Carteira")
     st.markdown("### Meta: Rentabilidade de **8% a 12% ao ano**")
@@ -265,7 +268,7 @@ elif menu == "🎯 Montar Carteira":
             }
             descricao = "⚖️ Equilíbrio entre segurança e rentabilidade"
             
-        else:
+        else:  # Arrojado
             alocacao = {
                 "Renda Fixa": {"pct": 20, "cor": "#2E86AB", "retorno": 0.08},
                 "FIIs": {"pct": 40, "cor": "#D4AF37", "retorno": 0.11},
@@ -327,10 +330,7 @@ elif menu == "🎯 Montar Carteira":
                 st.session_state.alocacao_escolhida = alocacao
                 st.session_state.retorno_esperado = retorno_total
                 st.session_state.etapa_carteira = 3
-                st.rerun()# --- ETAPA 3: ATIVOS ESPECÍFICOS ---
-elif st.session_state.etapa_carteira == 3:
-    st.markdown("---")
-    st.subheader("📈 Passo 3: Escolha seus ativos com análise inteligente")
+                st.rerun()("📈 Passo 3: Escolha seus ativos com análise inteligente")
     
     valor = st.session_state.valor_investir
     alocacao = st.session_state.alocacao_escolhida
