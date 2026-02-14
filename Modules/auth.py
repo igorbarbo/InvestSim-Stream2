@@ -1,14 +1,26 @@
 import sqlite3
 import streamlit_authenticator as stauth
+import os
 
 def carregar_credenciais():
     """Carrega usuários do banco e retorna no formato do streamlit-authenticator."""
-    # Atenção: Verifique se o nome é invest_v8.db ou invest_v10.db conforme conversamos
-    conn = sqlite3.connect('data/invest_v10.db') 
+    # 1. Garante que a pasta 'data' existe para evitar o OperationalError
+    if not os.path.exists('data'):
+        os.makedirs('data')
+        
+    # 2. Tenta conectar ao banco
+    db_path = 'data/invest_v10.db'
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
-    c.execute("SELECT username, nome, senha_hash FROM usuarios")
-    usuarios = c.fetchall()
-    conn.close()
+    
+    try:
+        c.execute("SELECT username, nome, senha_hash FROM usuarios")
+        usuarios = c.fetchall()
+    except sqlite3.OperationalError:
+        # Se a tabela não existir, retorna credenciais vazias em vez de travar o app
+        return {"usernames": {}}
+    finally:
+        conn.close()
 
     credentials = {"usernames": {}}
     for u in usuarios:
@@ -17,19 +29,4 @@ def carregar_credenciais():
             "password": u[2]
         }
     return credentials
-
-def criar_authenticator():
-    """Cria e retorna o objeto authenticator."""
-    credentials = carregar_credenciais()
-    
-    # Chave secreta para o cookie (mantenha fixa para não deslogar o usuário ao atualizar)
-    COOKIE_KEY = "chave_super_secreta_123"
-
-    authenticator = stauth.Authenticate(
-        credentials,
-        "invest_app_cookie",
-        COOKIE_KEY,
-        30  # Dias de expiração (A vírgula aqui é essencial)
-    )
-    return authenticator
     
