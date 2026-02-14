@@ -493,3 +493,51 @@ def calcular_evolucao_patrimonio(df_ativos):
         df_evolucao['Total'] = df_evolucao.sum(axis=1)
         return df_evolucao
     return None
+
+def calcular_rebalanceamento(df_ativos, metas, valor_disponivel=0):
+    """
+    Calcula quanto aportar em cada classe para atingir metas.
+    df_ativos deve ter colunas 'setor' e 'Patrimônio'.
+    metas: dicionário {classe: percentual_meta}
+    Retorna DataFrame com recomendações.
+    """
+    if df_ativos.empty or not metas:
+        return None
+    
+    total = df_ativos['Patrimônio'].sum() + valor_disponivel
+    atual_por_classe = df_ativos.groupby('setor')['Patrimônio'].sum()
+    
+    recomendacoes = []
+    for classe, meta_pct in metas.items():
+        if classe not in atual_por_classe.index:
+            atual = 0
+            atual_pct = 0
+        else:
+            atual = atual_por_classe[classe]
+            atual_pct = (atual / total) * 100 if total > 0 else 0
+        
+        alvo = total * meta_pct / 100
+        diferenca = alvo - atual
+        
+        if diferenca > 0:
+            acao = "COMPRAR"
+            cor = "#00FF00"
+        elif diferenca < 0:
+            acao = "VENDER"
+            cor = "#FF4444"
+        else:
+            acao = "OK"
+            cor = "#D4AF37"
+        
+        recomendacoes.append({
+            'Classe': classe,
+            'Atual (R$)': atual,
+            'Atual (%)': atual_pct,
+            'Meta (%)': meta_pct,
+            'Alvo (R$)': alvo,
+            'Diferença (R$)': diferenca,
+            'Ação': acao,
+            'Cor': cor
+        })
+    
+    return pd.DataFrame(recomendacoes)
