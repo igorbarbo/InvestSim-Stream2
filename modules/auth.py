@@ -1,9 +1,7 @@
 import streamlit_authenticator as stauth
 import sqlite3
-import streamlit as st
 
 def carregar_credenciais():
-    """Busca os usuários cadastrados no banco de dados para o login."""
     conn = sqlite3.connect('data/invest_v10.db')
     c = conn.cursor()
     try:
@@ -11,7 +9,8 @@ def carregar_credenciais():
         rows = c.fetchall()
     except:
         rows = []
-    conn.close()
+    finally:
+        conn.close()
     
     cred = {"usernames": {}}
     for r in rows:
@@ -19,7 +18,5 @@ def carregar_credenciais():
     return cred
 
 def criar_authenticator():
-    """Instancia o objeto de autenticação compatível com a versão 0.4+."""
     cred = carregar_credenciais()
-    return stauth.Authenticate(cred, "invest_cookie", "auth_key_v10_ultimate", 30)
-  
+    return stauth.Authenticate(cred, "invest_v10_cookie", "auth_key_123", 30)
