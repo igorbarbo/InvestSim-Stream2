@@ -3,7 +3,7 @@ import pandas as pd
 import yfinance as yf
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import numpy as np
 import sqlite3
@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# BANCO DE DADOS (SQLite) E FUNÇÕES CRUD
+# BANCO DE DADOS (SQLite)
 # ============================================
 DB_PATH = 'invest_v8.db'
 
@@ -43,7 +43,6 @@ def get_connection():
 def init_db():
     conn = get_connection()
     c = conn.cursor()
-    # Tabela de usuários
     c.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +51,6 @@ def init_db():
             senha_hash TEXT NOT NULL
         )
     ''')
-    # Tabela de ativos
     c.execute('''
         CREATE TABLE IF NOT EXISTS ativos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +62,6 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES usuarios(id)
         )
     ''')
-    # Tabela de metas de alocação
     c.execute('''
         CREATE TABLE IF NOT EXISTS metas_alocacao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +71,6 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES usuarios(id)
         )
     ''')
-    # Tabela de alertas
     c.execute('''
         CREATE TABLE IF NOT EXISTS alertas (
             id TEXT PRIMARY KEY,
@@ -91,7 +87,7 @@ def init_db():
     conn.close()
 
 def criar_usuario(username, nome, senha_plana):
-    hashed = stauth.Hasher.hash(senha_plana)  # <--- LINHA CORRIGIDA
+    hashed = stauth.Hasher.hash(senha_plana)
     conn = get_connection()
     c = conn.cursor()
     try:
@@ -402,28 +398,58 @@ def analisar_preco_ativo(ticker, dados_historicos):
         status = "oportunidade"
         mensagem = "🔥 OPORTUNIDADE! Muito barato"
         cor = "#00FF00"
-        explicacao = "### ✅ OPORTUNIDADE DE COMPRA!\n\n" + "".join([f"• {m}\n" for m in motivos[:4]]) + f"\n📊 **Preço atual:** R$ {preco:.2f}\n📊 **Média 12m:** R$ {media_12m:.2f}\n📊 **Mínima 5 anos:** R$ {minimo:.2f}\n📊 **Máxima 5 anos:** R$ {maximo:.2f}\n" + (f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n" if dados_historicos['dividend_yield'] else "") + f"\n💡 **RECOMENDAÇÃO:** COMPRAR - Ótimo ponto de entrada!" + alerta_risco
+        explicacao = ("### ✅ OPORTUNIDADE DE COMPRA!\n\n" +
+                      "".join([f"• {m}\n" for m in motivos[:4]]) +
+                      f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
+                      f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
+                      f"📊 **Mínima 5 anos:** R$ {minimo:.2f}\n"
+                      f"📊 **Máxima 5 anos:** R$ {maximo:.2f}\n")
+        if dados_historicos['dividend_yield']:
+            explicacao += f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n"
+        explicacao += f"\n💡 **RECOMENDAÇÃO:** COMPRAR - Ótimo ponto de entrada!" + alerta_risco
     elif pontuacao <= -20:
         status = "barato"
         mensagem = "👍 Barato - Bom momento"
         cor = "#90EE90"
-        explicacao = "### ✅ PREÇO ATRATIVO\n\n" + "".join([f"• {m}\n" for m in motivos[:3]]) + f"\n📊 **Preço atual:** R$ {preco:.2f}\n📊 **Média 12m:** R$ {media_12m:.2f}\n" + (f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n" if dados_historicos['dividend_yield'] else "") + f"\n💡 **RECOMENDAÇÃO:** Pode comprar - preço justo" + alerta_risco
+        explicacao = ("### ✅ PREÇO ATRATIVO\n\n" +
+                      "".join([f"• {m}\n" for m in motivos[:3]]) +
+                      f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
+                      f"📊 **Média 12m:** R$ {media_12m:.2f}\n")
+        if dados_historicos['dividend_yield']:
+            explicacao += f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n"
+        explicacao += f"\n💡 **RECOMENDAÇÃO:** Pode comprar - preço justo" + alerta_risco
     elif pontuacao <= 0:
         status = "neutro"
         mensagem = "⚖️ Preço justo"
         cor = "#D4AF37"
-        explicacao = "### ⚖️ PREÇO JUSTO\n\n" + "".join([f"• {m}\n" for m in motivos[:2]]) + f"\n📊 **Preço atual:** R$ {preco:.2f}\n📊 **Média 12m:** R$ {media_12m:.2f}\n" + f"\n💡 **RECOMENDAÇÃO:** Compra neutra - nem barato nem caro" + alerta_risco
+        explicacao = ("### ⚖️ PREÇO JUSTO\n\n" +
+                      "".join([f"• {m}\n" for m in motivos[:2]]) +
+                      f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
+                      f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
+                      f"\n💡 **RECOMENDAÇÃO:** Compra neutra - nem barato nem caro" + alerta_risco)
     elif pontuacao <= 20:
         status = "atencao"
         mensagem = "⚠️ Atenção - Acima da média"
         cor = "#FFA500"
-        explicacao = "### ⚠️ PREÇO ELEVADO\n\n" + "".join([f"• {m}\n" for m in motivos[:3]]) + f"\n📊 **Preço atual:** R$ {preco:.2f}\n📊 **Média 12m:** R$ {media_12m:.2f}\n📊 **Máxima 5 anos:** R$ {maximo:.2f}\n" + f"\n💡 **RECOMENDAÇÃO:** Comprar só se necessário - preço salgado" + alerta_risco
+        explicacao = ("### ⚠️ PREÇO ELEVADO\n\n" +
+                      "".join([f"• {m}\n" for m in motivos[:3]]) +
+                      f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
+                      f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
+                      f"📊 **Máxima 5 anos:** R$ {maximo:.2f}\n"
+                      f"\n💡 **RECOMENDAÇÃO:** Comprar só se necessário - preço salgado" + alerta_risco)
     else:
         status = "caro"
         mensagem = "❌ CARO! Evite comprar"
         cor = "#FF4444"
         preco_ideal = media_12m * 0.9
-        explicacao = "### ❌ PREÇO CARO DEMAIS!\n\n" + "".join([f"• {m}\n" for m in motivos[:4]]) + f"\n📊 **Preço atual:** R$ {preco:.2f}\n📊 **Média 12m:** R$ {media_12m:.2f}\n📊 **Máxima 5 anos:** R$ {maximo:.2f}\n" + (f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n" if dados_historicos['dividend_yield'] else "") + f"\n💡 **RECOMENDAÇÃO:** NÃO COMPRAR AGORA!\n   Espere o preço cair para pelo menos R$ {preco_ideal:.2f}" + alerta_risco
+        explicacao = ("### ❌ PREÇO CARO DEMAIS!\n\n" +
+                      "".join([f"• {m}\n" for m in motivos[:4]]) +
+                      f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
+                      f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
+                      f"📊 **Máxima 5 anos:** R$ {maximo:.2f}\n")
+        if dados_historicos['dividend_yield']:
+            explicacao += f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n"
+        explicacao += f"\n💡 **RECOMENDAÇÃO:** NÃO COMPRAR AGORA!\n   Espere o preço cair para pelo menos R$ {preco_ideal:.2f}" + alerta_risco
     return status, mensagem, cor, explicacao, pontuacao
 
 def plotar_grafico_historico(dados_historicos, ticker):
@@ -557,13 +583,10 @@ def calcular_rebalanceamento(df_ativos, metas, valor_disponivel=0):
         diferenca = alvo - atual
         if diferenca > 0:
             acao = "COMPRAR"
-            cor = "#00FF00"
         elif diferenca < 0:
             acao = "VENDER"
-            cor = "#FF4444"
         else:
             acao = "OK"
-            cor = "#D4AF37"
         recomendacoes.append({
             'Classe': classe,
             'Atual (R$)': atual,
@@ -571,8 +594,7 @@ def calcular_rebalanceamento(df_ativos, metas, valor_disponivel=0):
             'Meta (%)': meta_pct,
             'Alvo (R$)': alvo,
             'Diferença (R$)': diferenca,
-            'Ação': acao,
-            'Cor': cor
+            'Ação': acao
         })
     return pd.DataFrame(recomendacoes)
 
@@ -595,12 +617,12 @@ def carregar_credenciais():
 
 def criar_authenticator():
     credentials = carregar_credenciais()
-    COOKIE_KEY = "chave_super_secreta_12345678901234567890"  # use uma chave longa
+    COOKIE_KEY = "chave_super_secreta_12345678901234567890"
     authenticator = stauth.Authenticate(
         credentials,
         "invest_app_cookie",
         COOKIE_KEY,
-        30  # dias de expiração
+        30
     )
     return authenticator
 
@@ -618,7 +640,7 @@ def exportar_para_excel(df_carteira, df_analise=None):
 
 def exportar_para_csv(df):
     return df.to_csv(index=False).encode('utf-8')# ============================================
-# ATIVOS (config)
+# LISTA DE ATIVOS (config)
 # ============================================
 ATIVOS = {
     "Renda Fixa": [
@@ -683,7 +705,6 @@ init_db()
 conn = get_connection()
 cursor = conn.cursor()
 
-# Cria o usuário admin se não existir (executa apenas na primeira vez)
 cursor.execute("SELECT username FROM usuarios WHERE username='admin'")
 if not cursor.fetchone():
     hashed_password = stauth.Hasher.hash("1234")
@@ -695,9 +716,7 @@ if not cursor.fetchone():
     print("✅ Usuário admin criado com senha 1234")
 else:
     print("ℹ️ Usuário admin já existe")
-
 conn.close()
-
 
 # ============================================
 # SISTEMA DE LOGIN
@@ -708,7 +727,6 @@ authenticator.login()
 if st.session_state["authentication_status"]:
     username = st.session_state["username"]
     name = st.session_state["name"]
-    # Buscar user_id
     user_info = buscar_usuario_por_username(username)
     if user_info:
         user_id = user_info['id']
@@ -789,7 +807,7 @@ if menu == "🏠 Dashboard":
         st.subheader("📋 Detalhamento por Ativo")
         df_display = df[['ticker', 'qtd', 'pm', 'preco', 'Patrimônio', 'Lucro/Prejuízo', 'Variação %', 'status']].copy()
         df_display.columns = ['Ticker', 'Qtd', 'P.Médio', 'P.Atual', 'Patrimônio', 'Lucro/Prej', 'Var %', 'Status']
-        st.dataframe(df_display.style.format({'P.Médio': 'R$ {:.2f}', 'P.Atual': 'R$ {:.2f}', 'Patrimônio': 'R$ {:.2f}', 'Lucro/Prej': 'R$ {:.2f}', 'Var %': '{:.1f}%'}), use_container_width=True, height=400)
+        st.dataframe(df_display.style.format({'P.Médio': 'R$ {:.2f}', 'P.Atual': 'R$ {:.2f}', 'Patrimônio': 'R$ {:.2f}', 'Lucro/Prej': 'R$ {:.2f}', 'Var %': '{:.1f}%'}), width='stretch', height=400)
         col_g1, col_g2 = st.columns(2)
         with col_g1:
             st.subheader("Distribuição por Ativo")
@@ -807,7 +825,7 @@ if menu == "🏠 Dashboard":
             valor_aporte = st.number_input("💰 Valor disponível para aporte (R$)", min_value=0.0, value=0.0, step=100.0, key="aporte_rebalanceamento")
             df_rebalanceamento = calcular_rebalanceamento(df, metas, valor_aporte)
             if df_rebalanceamento is not None:
-                st.dataframe(df_rebalanceamento.style.format({'Atual (R$)': 'R$ {:.2f}', 'Atual (%)': '{:.2f}%', 'Meta (%)': '{:.2f}%', 'Alvo (R$)': 'R$ {:.2f}', 'Diferença (R$)': 'R$ {:.2f}'}), use_container_width=True)
+                st.dataframe(df_rebalanceamento.style.format({'Atual (R$)': 'R$ {:.2f}', 'Atual (%)': '{:.2f}%', 'Meta (%)': '{:.2f}%', 'Alvo (R$)': 'R$ {:.2f}', 'Diferença (R$)': 'R$ {:.2f}'}), width='stretch')
                 compras = df_rebalanceamento[df_rebalanceamento['Ação'] == 'COMPRAR']
                 if not compras.empty and valor_aporte > 0:
                     st.success("### 📝 Sugestão de aporte:")
@@ -868,7 +886,7 @@ elif menu == "🎯 Montar Carteira":
         metas = {classe: dados['pct'] for classe, dados in alocacao.items()}
         salvar_metas(st.session_state.user_id, metas)
         df_alloc = pd.DataFrame([{"Classe": classe, "Percentual": f"{dados['pct']}%", "Valor (R$)": f"R$ {valor * dados['pct']/100:,.2f}", "Retorno Anual": f"{dados['retorno']*100:.1f}%"} for classe, dados in alocacao.items()])
-        st.dataframe(df_alloc, use_container_width=True)
+        st.dataframe(df_alloc, width='stretch')
         fig = px.pie(values=[d['pct'] for d in alocacao.values()], names=list(alocacao.keys()), title="Distribuição da Carteira", color_discrete_sequence=[d['cor'] for d in alocacao.values()])
         st.plotly_chart(fig, use_container_width=True)
         retorno_total = sum((d['pct']/100) * d['retorno'] for d in alocacao.values())
@@ -995,7 +1013,7 @@ elif menu == "🎯 Montar Carteira":
                 elif val == 'caro':
                     return 'background-color: #8B0000'
                 return ''
-            st.dataframe(df_display.style.format({'Preço': 'R$ {:.2f}', 'Investimento': 'R$ {:.2f}'}).applymap(colorir_status, subset=['Status']), use_container_width=True)
+            st.dataframe(df_display.style.format({'Preço': 'R$ {:.2f}', 'Investimento': 'R$ {:.2f}'}).applymap(colorir_status, subset=['Status']), width='stretch')
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
                 st.metric("Total investido", f"R$ {total_investido:,.2f}")
@@ -1022,9 +1040,7 @@ elif menu == "🎯 Montar Carteira":
                     st.session_state.etapa_carteira = 1
                     st.rerun()
         else:
-            st.info("👆 Selecione as quantidades de cada ativo para montar sua carteira")
-
-# ============================================
+            st.info("👆 Selecione as quantidades de cada ativo para montar sua carteira")# ============================================
 # 3. EVOLUÇÃO
 # ============================================
 elif menu == "📈 Evolução":
@@ -1058,3 +1074,292 @@ elif menu == "🔔 Alertas":
     df = carregar_ativos(st.session_state.user_id)
     if df.empty:
         st.info("Adicione ativos para configurar alertas")
+    else:
+        tab_alerta1, tab_alerta2 = st.tabs(["⚙️ Configurar", "📋 Meus Alertas"])
+        with tab_alerta1:
+            st.write("### Configurar Novo Alerta")
+            col_a1, col_a2, col_a3 = st.columns(3)
+            with col_a1:
+                ticker_alerta = st.selectbox("Ativo", df['ticker'].tolist())
+            with col_a2:
+                tipo_alerta = st.selectbox("Tipo", ["Acima de R$", "Abaixo de R$"])
+            with col_a3:
+                preco_alerta = st.number_input("Preço alvo", min_value=0.01, value=10.0, step=1.0)
+            preco_atual, status, _ = pegar_preco(ticker_alerta)
+            if preco_atual:
+                st.caption(f"💰 Preço atual: R$ {preco_atual:.2f}")
+            if st.button("✅ Ativar Alerta", use_container_width=True):
+                if salvar_alerta(st.session_state.user_id, ticker_alerta, tipo_alerta, preco_alerta):
+                    st.success("Alerta configurado!")
+                    st.rerun()
+        with tab_alerta2:
+            alertas = carregar_alertas(st.session_state.user_id)
+            if not alertas:
+                st.info("Nenhum alerta configurado")
+            else:
+                for alerta_id, alerta in list(alertas.items()):
+                    preco_atual, _, _ = pegar_preco(alerta['ticker'])
+                    with st.container():
+                        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                        with col1:
+                            st.write(f"**{alerta['ticker']}**")
+                        with col2:
+                            st.write(f"{alerta['tipo']} R$ {alerta['preco']:.2f}")
+                        with col3:
+                            if preco_atual:
+                                st.write(f"Atual: R$ {preco_atual:.2f}")
+                                if (alerta['tipo'] == "Acima de R$" and preco_atual >= alerta['preco']) or (alerta['tipo'] == "Abaixo de R$" and preco_atual <= alerta['preco']):
+                                    st.warning("🚨 DISPAROU!")
+                        with col4:
+                            if st.button("🗑️", key=f"del_{alerta_id}"):
+                                excluir_alerta(alerta_id)
+                                st.rerun()
+                        st.divider()
+
+# ============================================
+# 5. IMPOSTO RENDA
+# ============================================
+elif menu == "📝 Imposto Renda":
+    st.title("📝 Imposto de Renda")
+    tab_ir1, tab_ir2, tab_ir3 = st.tabs(["📊 Venda de Ações", "🏢 FIIs", "📋 Resumo Anual"])
+    with tab_ir1:
+        st.write("### Simulador de IR - Venda de Ações")
+        col_ir1, col_ir2, col_ir3 = st.columns(3)
+        with col_ir1:
+            acao_venda = st.text_input("Ativo vendido", "PETR4").upper()
+            qtd_venda = st.number_input("Quantidade vendida", min_value=0.0, value=100.0)
+        with col_ir2:
+            preco_compra = st.number_input("Preço médio de compra (R$)", min_value=0.01, value=30.0)
+            preco_venda = st.number_input("Preço de venda (R$)", min_value=0.01, value=35.0)
+        with col_ir3:
+            total_vendas_mes = st.number_input("Total vendido no mês (R$)", min_value=0.0, value=15000.0)
+        custo_total = qtd_venda * preco_compra
+        venda_total = qtd_venda * preco_venda
+        lucro = venda_total - custo_total
+        st.write("---")
+        if lucro > 0 and total_vendas_mes > 20000:
+            ir_devido = lucro * 0.15
+            st.error(f"IR devido: R$ {ir_devido:,.2f}")
+            with st.expander("Código DARF"):
+                st.code(f"""
+                DARF - Código 6015
+                Valor: R$ {ir_devido:.2f}
+                Vencimento: Último dia útil do mês seguinte
+                """)
+        else:
+            st.success("✅ ISENTO de IR")
+    with tab_ir2:
+        st.write("### Imposto sobre FIIs")
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            dividendos = st.number_input("Dividendos recebidos (R$)", min_value=0.0, value=500.0)
+        with col_f2:
+            lucro_fii = st.number_input("Lucro com vendas (R$)", min_value=0.0, value=0.0)
+        ir_total = (dividendos + lucro_fii) * 0.20
+        if ir_total > 0:
+            st.error(f"IR sobre FIIs: R$ {ir_total:,.2f}")
+
+# ============================================
+# 6. PREÇO TETO
+# ============================================
+elif menu == "💰 Preço Teto":
+    st.title("💰 Preço Teto - Método Bazin")
+    st.caption("Baseado nos dividendos dos últimos 12 meses")
+    df = carregar_ativos(st.session_state.user_id)
+    if df.empty:
+        st.info("Adicione ativos para calcular preço teto")
+    else:
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            dy_desejado = st.slider("📊 Dividend Yield desejado (%)", 4, 12, 6) / 100
+            st.caption("6% é o padrão do método Bazin")
+        with col_t2:
+            st.metric("DY Selecionado", f"{dy_desejado*100:.1f}%")
+        resultados_teto = []
+        for ticker in df['ticker']:
+            preco_teto, msg = calcular_preco_teto_bazin(ticker, dy_desejado)
+            preco_atual, _, _ = pegar_preco(ticker)
+            if preco_teto and preco_atual:
+                diferenca = (preco_teto - preco_atual) / preco_atual * 100
+                if preco_atual <= preco_teto:
+                    status = "✅ COMPRAR"
+                else:
+                    status = "⏳ ESPERAR"
+                resultados_teto.append({
+                    'Ticker': ticker,
+                    'Preço Atual': preco_atual,
+                    'Preço Teto': preco_teto,
+                    'Diferença %': diferenca,
+                    'Status': status
+                })
+        if resultados_teto:
+            df_teto = pd.DataFrame(resultados_teto)
+            st.dataframe(df_teto.style.format({'Preço Atual': 'R$ {:.2f}', 'Preço Teto': 'R$ {:.2f}', 'Diferença %': '{:.1f}%'}), width='stretch', height=400)
+
+# ============================================
+# 7. ANÁLISE AVANÇADA
+# ============================================
+elif menu == "📊 Análise Avançada":
+    st.title("📊 Análise Avançada da Carteira")
+    df = carregar_ativos(st.session_state.user_id)
+    if df.empty:
+        st.info("Adicione ativos para ver análises avançadas")
+    else:
+        tab_av1, tab_av2, tab_av3, tab_av4 = st.tabs(["📊 Correlação", "📈 Risco", "💰 Análise Preço", "📥 Exportar"])
+        with tab_av1:
+            st.subheader("📊 Matriz de Correlação entre Ativos")
+            st.caption("Mostra como os ativos se movem juntos. Valores próximos de 1 indicam alta correlação.")
+            with st.spinner("Calculando correlações..."):
+                correlacao, _ = calcular_matriz_correlacao(df['ticker'].tolist())
+                if correlacao is not None:
+                    fig = px.imshow(correlacao, text_auto=True, aspect="auto", color_continuous_scale='RdYlGn', title="Matriz de Correlação")
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.subheader("🔍 Insights de Correlação")
+                    for i in range(len(correlacao.columns)):
+                        for j in range(i+1, len(correlacao.columns)):
+                            corr_val = correlacao.iloc[i, j]
+                            ativo1 = correlacao.columns[i]
+                            ativo2 = correlacao.columns[j]
+                            if abs(corr_val) > 0.8:
+                                st.warning(f"⚠️ **Alta correlação** entre {ativo1} e {ativo2}: {corr_val:.2f}")
+                                st.caption("Isso significa que eles tendem a se mover na mesma direção. Pouca diversificação.")
+                            elif abs(corr_val) < 0.3:
+                                st.success(f"✅ **Baixa correlação** entre {ativo1} e {ativo2}: {corr_val:.2f}")
+                                st.caption("Ótimo para diversificação! Eles se movem de forma independente.")
+                else:
+                    st.warning("Não foi possível calcular correlações (precisa de pelo menos 2 ativos com histórico)")
+        with tab_av2:
+            st.subheader("📈 Análise de Risco")
+            with st.spinner("Calculando métricas de risco..."):
+                dados_risco = calcular_risco_retorno(df['ticker'].tolist())
+                if dados_risco:
+                    df_risco = pd.DataFrame(dados_risco).T
+                    df_risco.columns = ['Retorno Anual %', 'Volatilidade %', 'Drawdown Máx %']
+                    st.dataframe(df_risco.style.format('{:.2f}%'), width='stretch')
+                    fig = px.scatter(df_risco, x='Volatilidade %', y='Retorno Anual %',
+                                    text=df_risco.index,
+                                    title="Risco x Retorno",
+                                    labels={'Volatilidade %': 'Risco (Volatilidade)', 'Retorno Anual %': 'Retorno Esperado'})
+                    fig.update_traces(textposition='top center')
+                    st.plotly_chart(fig, use_container_width=True)
+        with tab_av3:
+            st.subheader("💰 Análise de Preço - Caro ou Barato?")
+            ticker_selecionado = st.selectbox("Selecione um ativo para análise", df['ticker'].tolist())
+            if ticker_selecionado:
+                with st.spinner("Analisando dados históricos..."):
+                    dados_hist = buscar_dados_historicos(ticker_selecionado)
+                    status, msg_status, cor_status, explicacao, pontuacao = analisar_preco_ativo(ticker_selecionado, dados_hist)
+                    st.markdown(f"<h3 style='color:{cor_status}'>{msg_status}</h3>", unsafe_allow_html=True)
+                    st.markdown(explicacao)
+                    if dados_hist:
+                        fig = plotar_grafico_historico(dados_hist, ticker_selecionado)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+        with tab_av4:
+            st.subheader("📥 Exportar Dados")
+            with st.spinner("Preparando dados para exportação..."):
+                precos_info = []
+                for ticker in df['ticker']:
+                    preco, status, msg = pegar_preco(ticker)
+                    precos_info.append({'ticker': ticker, 'preco': preco if preco else 0, 'status': status})
+                df_precos = pd.DataFrame(precos_info)
+                df_export = df.merge(df_precos, on='ticker')
+                df_export['Patrimônio'] = df_export['qtd'] * df_export['preco']
+                df_export['Custo Total'] = df_export['qtd'] * df_export['pm']
+                df_export['Lucro/Prejuízo'] = df_export['Patrimônio'] - df_export['Custo Total']
+                analise_precos = []
+                for ticker in df['ticker']:
+                    dados_hist = buscar_dados_historicos(ticker)
+                    if dados_hist:
+                        status, _, _, _, _ = analisar_preco_ativo(ticker, dados_hist)
+                        analise_precos.append({'ticker': ticker, 'analise': status})
+                df_analise = pd.DataFrame(analise_precos) if analise_precos else None
+            col_exp1, col_exp2 = st.columns(2)
+            with col_exp1:
+                st.write("**Exportar para Excel**")
+                excel_data = exportar_para_excel(df_export, df_analise)
+                st.download_button(
+                    label="📥 Baixar Excel",
+                    data=excel_data,
+                    file_name=f"carteira_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width='stretch'
+                )
+            with col_exp2:
+                st.write("**Exportar para CSV**")
+                csv_data = exportar_para_csv(df_export)
+                st.download_button(
+                    label="📥 Baixar CSV",
+                    data=csv_data,
+                    file_name=f"carteira_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    width='stretch'
+                )
+            with st.expander("📋 Prévia dos dados"):
+                st.dataframe(df_export, width='stretch')
+
+# ============================================
+# 8. GESTÃO DE CARTEIRA
+# ============================================
+elif menu == "⚙️ Gestão":
+    st.title("⚙️ Gerenciar Ativos")
+    tab1, tab2 = st.tabs(["📥 Adicionar", "✏️ Editar/Excluir"])
+    with tab1:
+        with st.form("add_ativo", clear_on_submit=True):
+            st.subheader("➕ Novo Ativo")
+            col1, col2 = st.columns(2)
+            with col1:
+                ticker = st.text_input("📌 Ticker", help="Ex: PETR4, MXRF11").upper()
+                qtd = st.number_input("🔢 Quantidade", min_value=0.01, step=0.01, format="%.2f")
+            with col2:
+                pm = st.number_input("💵 Preço Médio (R$)", min_value=0.01, step=0.01, format="%.2f")
+                setor = st.selectbox("🏷️ Setor", ["Ações", "FII Papel", "FII Tijolo", "ETF", "Renda Fixa"])
+            submitted = st.form_submit_button("💾 Salvar Ativo", use_container_width=True)
+            if submitted:
+                if salvar_ativo(st.session_state.user_id, ticker, qtd, pm, setor):
+                    st.balloons()
+    with tab2:
+        st.subheader("📋 Ativos Cadastrados")
+        df_lista = carregar_ativos(st.session_state.user_id)
+        if not df_lista.empty:
+            if 'editando' not in st.session_state:
+                st.session_state.editando = None
+            for idx, row in df_lista.iterrows():
+                with st.container():
+                    col1, col2, col3 = st.columns([4, 1, 1])
+                    with col1:
+                        st.write(f"**{row['ticker']}** | {row['qtd']:.2f} cotas | R$ {row['pm']:.2f} | {row['setor']}")
+                    with col2:
+                        if st.button(f"✏️", key=f"edit_{row['ticker']}", use_container_width=True):
+                            st.session_state.editando = row['ticker']
+                            st.rerun()
+                    with col3:
+                        if st.button(f"🗑️", key=f"del_{row['ticker']}", use_container_width=True):
+                            if excluir_ativo(st.session_state.user_id, row['ticker']):
+                                st.rerun()
+                    if st.session_state.editando == row['ticker']:
+                        with st.form(key=f"form_edit_{row['ticker']}"):
+                            nova_qtd = st.number_input("Quantidade", value=float(row['qtd']))
+                            novo_pm = st.number_input("Preço Médio", value=float(row['pm']))
+                            novo_setor = st.selectbox("Setor", ["Ações", "FII Papel", "FII Tijolo", "ETF", "Renda Fixa"],
+                                                      index=["Ações", "FII Papel", "FII Tijolo", "ETF", "Renda Fixa"].index(row['setor']))
+                            col_s1, col_s2 = st.columns(2)
+                            with col_s1:
+                                if st.form_submit_button("Salvar"):
+                                    if atualizar_ativo(st.session_state.user_id, row['ticker'], nova_qtd, novo_pm, novo_setor):
+                                        st.session_state.editando = None
+                                        st.rerun()
+                            with col_s2:
+                                if st.form_submit_button("Cancelar"):
+                                    st.session_state.editando = None
+                                    st.rerun()
+                    st.divider()
+        else:
+            st.info("📭 Nenhum ativo cadastrado.")
+
+# ============================================
+# RODAPÉ
+# ============================================
+st.sidebar.markdown("---")
+st.sidebar.caption(f"🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+st.sidebar.caption("💎 Igorbarbo Private Banking v9.0 - Completo")
