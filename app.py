@@ -4,11 +4,10 @@ import yfinance as yf
 import sqlite3
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import numpy as np
 import io
-import base64
 
 # --- CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Igorbarbo V8 Ultimate", layout="wide")
@@ -23,10 +22,6 @@ st.markdown("""
     .stDataFrame { background-color: #0F1116; border-radius: 10px; }
     .stButton button { background-color: #D4AF37; color: black; font-weight: bold; }
     .stButton button:hover { background-color: #B8860B; }
-    .status-oportunidade { color: #00FF00; font-weight: bold; }
-    .status-barato { color: #90EE90; font-weight: bold; }
-    .status-atencao { color: #FFA500; font-weight: bold; }
-    .status-caro { color: #FF4444; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -123,20 +118,33 @@ def carregar_metas_alocacao():
     except:
         return {}
 
-# --- SISTEMA DE LOGIN ---
-if "logado" not in st.session_state:
+# --- INICIALIZAÇÃO DO SESSION STATE ---
+if 'logado' not in st.session_state:
     st.session_state.logado = False
+if 'confirmacao_exclusao' not in st.session_state:
     st.session_state.confirmacao_exclusao = {}
+if 'etapa_carteira' not in st.session_state:
     st.session_state.etapa_carteira = 1
+if 'alertas' not in st.session_state:
     st.session_state.alertas = {}
+if 'metas_alocacao' not in st.session_state:
     st.session_state.metas_alocacao = carregar_metas_alocacao()
+if 'valor_investir' not in st.session_state:
     st.session_state.valor_investir = 1000.0
+if 'perfil_usuario' not in st.session_state:
     st.session_state.perfil_usuario = "Moderado"
+if 'prazo_usuario' not in st.session_state:
     st.session_state.prazo_usuario = "Médio (3-5 anos)"
+if 'objetivo_usuario' not in st.session_state:
     st.session_state.objetivo_usuario = "Crescimento patrimonial"
+if 'alocacao_escolhida' not in st.session_state:
     st.session_state.alocacao_escolhida = None
+if 'retorno_esperado' not in st.session_state:
     st.session_state.retorno_esperado = 0.095
+if 'editando' not in st.session_state:
+    st.session_state.editando = None
 
+# --- SISTEMA DE LOGIN ---
 if not st.session_state.logado:
     st.title("🏛️ Acesso Restrito")
     senha = st.text_input("Digite a senha para acessar seu Private Banking:", type="password")
@@ -170,265 +178,6 @@ def pegar_preco(ticker):
             
     except Exception as e:
         return None, "erro", str(e)
-
-# ============================================
-# FUNÇÕES DE ANÁLISE INTELIGENTE
-# ============================================
-
-@st.cache_data(ttl=3600)
-def buscar_dados_historicos(ticker, periodo="5y"):
-    """Busca dados históricos do ativo para análise"""
-    try:
-        acao = yf.Ticker(f"{ticker}.SA")
-        hist = acao.history(period=periodo)
-        
-        if hist.empty:
-            return None
-        
-        preco_atual = hist['Close'].iloc[-1]
-        preco_medio_12m = hist['Close'].tail(252).mean()
-        preco_medio_5y = hist['Close'].mean()
-        
-        percentil_20 = hist['Close'].quantile(0.20)
-        percentil_80 = hist['Close'].quantile(0.80)
-        
-        minimo_5y = hist['Close'].min()
-        maximo_5y = hist['Close'].max()
-        
-        if len(hist) > 252:
-            preco_1ano_atras = hist['Close'].iloc[-252] if len(hist) >= 252 else hist['Close'].iloc[0]
-            variacao_anual = (preco_atual / preco_1ano_atras - 1) * 100
-        else:
-            variacao_anual = 0
-        
-        try:
-            dividendos = acao.dividends.tail(12).mean() * 4
-            if dividendos > 0 and preco_atual > 0:
-                dy = (dividendos / preco_atual) * 100
-            else:
-                dy = None
-        except:
-            dy = None
-        
-        return {
-            'ticker': ticker,
-            'preco_atual': preco_atual,
-            'preco_medio_12m': preco_medio_12m,
-            'preco_medio_5y': preco_medio_5y,
-            'percentil_20': percentil_20,
-            'percentil_80': percentil_80,
-            'minimo_5y': minimo_5y,
-            'maximo_5y': maximo_5y,
-            'variacao_anual': variacao_anual,
-            'dividend_yield': dy,
-            'dados': hist
-        }
-    except Exception as e:
-        return None
-
-def analisar_preco_ativo(ticker, dados_historicos):
-    """
-    Analisa se o preço atual está caro ou barato baseado em dados históricos
-    """
-    if not dados_historicos:
-        return "neutro", "🔵 DADOS INSUFICIENTES", "#808080", "Não foi possível buscar dados históricos para análise", 0
-    
-    preco = dados_historicos['preco_atual']
-    media_12m = dados_historicos['preco_medio_12m']
-    p20 = dados_historicos['percentil_20']
-    p80 = dados_historicos['percentil_80']
-    minimo = dados_historicos['minimo_5y']
-    maximo = dados_historicos['maximo_5y']
-    
-    posicao_relativa = ((preco - minimo) / (maximo - minimo)) * 100 if maximo > minimo else 50
-    
-    pontuacao = 0
-    motivos = []
-    
-    if preco < media_12m * 0.85:
-        pontuacao -= 25
-        motivos.append("📉 Preço 15% abaixo da média de 12 meses")
-    elif preco < media_12m * 0.9:
-        pontuacao -= 20
-        motivos.append("📉 Preço 10% abaixo da média de 12 meses")
-    elif preco < media_12m:
-        pontuacao -= 10
-        motivos.append("📉 Preço abaixo da média de 12 meses")
-    elif preco > media_12m * 1.15:
-        pontuacao += 25
-        motivos.append("📈 Preço 15% acima da média de 12 meses")
-    elif preco > media_12m * 1.1:
-        pontuacao += 20
-        motivos.append("📈 Preço 10% acima da média de 12 meses")
-    elif preco > media_12m:
-        pontuacao += 10
-        motivos.append("📈 Preço acima da média de 12 meses")
-    
-    if preco < p20:
-        pontuacao -= 30
-        motivos.append("💰 Entre os 20% preços mais baixos dos últimos 5 anos")
-    elif preco > p80:
-        pontuacao += 30
-        motivos.append("⚠️ Entre os 20% preços mais altos dos últimos 5 anos")
-    
-    if posicao_relativa < 15:
-        pontuacao -= 25
-        motivos.append(f"🎯 Próximo da mínima histórica (R$ {minimo:.2f})")
-    elif posicao_relativa < 30:
-        pontuacao -= 15
-        motivos.append(f"📊 Na faixa inferior da série histórica")
-    elif posicao_relativa > 85:
-        pontuacao += 25
-        motivos.append(f"🔴 Próximo da máxima histórica (R$ {maximo:.2f})")
-    elif posicao_relativa > 70:
-        pontuacao += 15
-        motivos.append(f"📊 Na faixa superior da série histórica")
-    
-    if dados_historicos['variacao_anual'] < -20:
-        pontuacao -= 20
-        motivos.append(f"📉 Caiu {dados_historicos['variacao_anual']:.1f}% no último ano")
-    elif dados_historicos['variacao_anual'] < -10:
-        pontuacao -= 10
-        motivos.append(f"📉 Caiu {dados_historicos['variacao_anual']:.1f}% no último ano")
-    elif dados_historicos['variacao_anual'] > 50:
-        pontuacao += 25
-        motivos.append(f"🚀 Subiu {dados_historicos['variacao_anual']:.1f}% no último ano")
-    elif dados_historicos['variacao_anual'] > 30:
-        pontuacao += 15
-        motivos.append(f"🚀 Subiu {dados_historicos['variacao_anual']:.1f}% no último ano")
-    
-    if pontuacao <= -40:
-        status = "oportunidade"
-        mensagem = "🔥 OPORTUNIDADE! Muito barato"
-        cor = "#00FF00"
-        explicacao = "### ✅ OPORTUNIDADE DE COMPRA!\n\n"
-        explicacao += "**Este ativo está muito barato comparado à sua história:**\n\n"
-        for m in motivos[:4]:
-            explicacao += f"• {m}\n"
-        explicacao += f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
-        explicacao += f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
-        explicacao += f"📊 **Mínima 5 anos:** R$ {minimo:.2f}\n"
-        explicacao += f"📊 **Máxima 5 anos:** R$ {maximo:.2f}\n"
-        if dados_historicos['dividend_yield']:
-            explicacao += f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n"
-        explicacao += f"\n💡 **RECOMENDAÇÃO:** COMPRAR - Ótimo ponto de entrada!"
-    
-    elif pontuacao <= -20:
-        status = "barato"
-        mensagem = "👍 Barato - Bom momento"
-        cor = "#90EE90"
-        explicacao = "### ✅ PREÇO ATRATIVO\n\n"
-        explicacao += "**Este ativo está abaixo da média histórica:**\n\n"
-        for m in motivos[:3]:
-            explicacao += f"• {m}\n"
-        explicacao += f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
-        explicacao += f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
-        if dados_historicos['dividend_yield']:
-            explicacao += f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n"
-        explicacao += f"\n💡 **RECOMENDAÇÃO:** Pode comprar - preço justo"
-    
-    elif pontuacao <= 0:
-        status = "neutro"
-        mensagem = "⚖️ Preço justo"
-        cor = "#D4AF37"
-        explicacao = "### ⚖️ PREÇO JUSTO\n\n"
-        explicacao += "**Este ativo está dentro da faixa histórica normal:**\n\n"
-        for m in motivos[:2]:
-            explicacao += f"• {m}\n"
-        explicacao += f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
-        explicacao += f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
-        explicacao += f"\n💡 **RECOMENDAÇÃO:** Compra neutra - nem barato nem caro"
-    
-    elif pontuacao <= 20:
-        status = "atencao"
-        mensagem = "⚠️ Atenção - Acima da média"
-        cor = "#FFA500"
-        explicacao = "### ⚠️ PREÇO ELEVADO\n\n"
-        explicacao += "**Este ativo está acima da média histórica:**\n\n"
-        for m in motivos[:3]:
-            explicacao += f"• {m}\n"
-        explicacao += f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
-        explicacao += f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
-        explicacao += f"📊 **Máxima 5 anos:** R$ {maximo:.2f}\n"
-        explicacao += f"\n💡 **RECOMENDAÇÃO:** Comprar só se necessário - preço salgado"
-    
-    else:
-        status = "caro"
-        mensagem = "❌ CARO! Evite comprar"
-        cor = "#FF4444"
-        explicacao = "### ❌ PREÇO CARO DEMAIS!\n\n"
-        explicacao += "**Este ativo está muito caro comparado à sua história:**\n\n"
-        for m in motivos[:4]:
-            explicacao += f"• {m}\n"
-        explicacao += f"\n📊 **Preço atual:** R$ {preco:.2f}\n"
-        explicacao += f"📊 **Média 12m:** R$ {media_12m:.2f}\n"
-        explicacao += f"📊 **Máxima 5 anos:** R$ {maximo:.2f}\n"
-        if dados_historicos['dividend_yield']:
-            explicacao += f"💰 **Dividend Yield:** {dados_historicos['dividend_yield']:.2f}%\n"
-        preco_ideal = media_12m * 0.9
-        explicacao += f"\n💡 **RECOMENDAÇÃO:** NÃO COMPRAR AGORA!\n"
-        explicacao += f"   Espere o preço cair para pelo menos R$ {preco_ideal:.2f}"
-    
-    return status, mensagem, cor, explicacao, pontuacao
-
-def plotar_grafico_historico(dados_historicos, ticker):
-    """Gera gráfico com análise de preço"""
-    if not dados_historicos:
-        return None
-    
-    hist = dados_historicos['dados']
-    preco_atual = dados_historicos['preco_atual']
-    media_12m = dados_historicos['preco_medio_12m']
-    p20 = dados_historicos['percentil_20']
-    p80 = dados_historicos['percentil_80']
-    
-    fig = go.Figure()
-    
-    fig.add_trace(go.Scatter(
-        x=hist.index,
-        y=hist['Close'],
-        mode='lines',
-        name='Preço',
-        line=dict(color='#D4AF37', width=2)
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=hist.index,
-        y=[media_12m] * len(hist),
-        mode='lines',
-        name='Média 12m',
-        line=dict(color='white', width=1, dash='dash')
-    ))
-    
-    fig.add_hrect(
-        y0=p20, y1=p80,
-        fillcolor="green",
-        opacity=0.1,
-        line_width=0,
-        name="Faixa Normal"
-    )
-    
-    cor_status = "#00FF00" if preco_atual < media_12m else "#FF4444"
-    fig.add_hline(
-        y=preco_atual,
-        line_dash="dot",
-        line_color=cor_status,
-        annotation_text=f"Atual: R$ {preco_atual:.2f}",
-        annotation_position="top right"
-    )
-    
-    fig.update_layout(
-        title=f"{ticker} - Histórico de Preços (5 anos)",
-        yaxis_title="Preço (R$)",
-        xaxis_title="Data",
-        height=400,
-        showlegend=True,
-        plot_bgcolor='#0F1116',
-        paper_bgcolor='#0F1116',
-        font=dict(color='white')
-    )
-    
-    return fig
 
 # ============================================
 # FUNÇÕES DE ANÁLISE AVANÇADA
@@ -497,7 +246,6 @@ def analisar_concentracao_setorial(df_ativos):
 def calcular_preco_teto_bazin(ticker, dy_desejado=0.06):
     """
     Calcula preço teto pelo método Bazin
-    Preço teto = (Dividendo anual médio) / (DY desejado)
     """
     try:
         acao = yf.Ticker(f"{ticker}.SA")
@@ -513,13 +261,11 @@ def calcular_preco_teto_bazin(ticker, dy_desejado=0.06):
     except Exception as e:
         return None, str(e)
 
-def exportar_para_excel(df_carteira, df_analise=None):
+def exportar_para_excel(df_carteira):
     """Exporta dados para Excel"""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_carteira.to_excel(writer, sheet_name='Carteira', index=False)
-        if df_analise is not None:
-            df_analise.to_excel(writer, sheet_name='Análise', index=False)
     output.seek(0)
     return output
 
@@ -551,13 +297,10 @@ def calcular_rebalanceamento(df_ativos, metas, valor_disponivel=0):
         
         if diferenca > 0:
             acao = "COMPRAR"
-            cor = "#00FF00"
         elif diferenca < 0:
             acao = "VENDER"
-            cor = "#FF4444"
         else:
             acao = "OK"
-            cor = "#D4AF37"
         
         recomendacoes.append({
             'Classe': classe,
@@ -566,8 +309,7 @@ def calcular_rebalanceamento(df_ativos, metas, valor_disponivel=0):
             'Meta (%)': meta_pct,
             'Alvo (R$)': alvo,
             'Diferença (R$)': diferenca,
-            'Ação': acao,
-            'Cor': cor
+            'Ação': acao
         })
     
     return pd.DataFrame(recomendacoes)
@@ -576,4 +318,228 @@ def calcular_rebalanceamento(df_ativos, metas, valor_disponivel=0):
 # MENU LATERAL
 # ============================================
 st.sidebar.title("💎 IGORBARBO PRIVATE")
-menu = st.sidebar
+menu = st.sidebar.radio("Navegação", [
+    "🏠 Dashboard", 
+    "🎯 Montar Carteira",
+    "📈 Evolução",
+    "🔔 Alertas",
+    "📝 Imposto Renda",
+    "🎯 Projeção",
+    "📊 Análise Avançada",
+    "⚙️ Gestão"
+])
+
+# ============================================
+# 1. DASHBOARD
+# ============================================
+if menu == "🏠 Dashboard":
+    st.title("🏛️ Patrimônio em Tempo Real")
+    
+    col1, col2, col3 = st.columns([3, 1, 1])
+    with col1:
+        st.markdown("### 📊 Resumo da Carteira")
+    with col2:
+        st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
+    with col3:
+        if st.button("🔄 Atualizar Preços"):
+            st.cache_data.clear()
+            st.rerun()
+    
+    df = pd.read_sql_query("SELECT * FROM ativos", conn)
+    
+    if not df.empty:
+        with st.spinner('🔄 Buscando preços do mercado...'):
+            precos_info = []
+            for ticker in df['ticker']:
+                preco, status, msg = pegar_preco(ticker)
+                precos_info.append({
+                    'ticker': ticker,
+                    'preco': preco if preco else 0,
+                    'status': status,
+                    'msg': msg
+                })
+            
+            df_precos = pd.DataFrame(precos_info)
+            df = df.merge(df_precos, on='ticker')
+            
+            df['Patrimônio'] = df['qtd'] * df['preco']
+            df['Custo Total'] = df['qtd'] * df['pm']
+            df['Lucro/Prejuízo'] = df['Patrimônio'] - df['Custo Total']
+            df['Variação %'] = (df['preco'] / df['pm'] - 1) * 100
+            
+            total_patrimonio = df['Patrimônio'].sum()
+            total_custo = df['Custo Total'].sum()
+            total_lucro = df['Lucro/Prejuízo'].sum()
+            renda_est = total_patrimonio * 0.0085
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Investido", f"R$ {total_custo:,.2f}")
+        c2.metric("Patrimônio Atual", f"R$ {total_patrimonio:,.2f}")
+        c3.metric("Lucro/Prejuízo", f"R$ {total_lucro:,.2f}")
+        c4.metric("Renda Mensal Est.", f"R$ {renda_est:,.2f}")
+        
+        st.write("---")
+        
+        # ALERTA DE CONCENTRAÇÃO SETORIAL
+        alertas_setoriais, setores = analisar_concentracao_setorial(df)
+        if alertas_setoriais:
+            with st.expander("⚠️ Análise de Concentração Setorial", expanded=True):
+                for alerta in alertas_setoriais:
+                    if alerta['nivel'] in ['CRÍTICO', 'ALTO']:
+                        st.markdown(f"<p style='color:{alerta['cor']}; font-weight:bold;'>{alerta['mensagem']}</p>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<p style='color:{alerta['cor']};'>{alerta['mensagem']}</p>", unsafe_allow_html=True)
+        
+        st.subheader("📋 Detalhamento por Ativo")
+        
+        df_display = df[['ticker', 'qtd', 'pm', 'preco', 'Patrimônio', 'Lucro/Prejuízo', 'Variação %', 'status']].copy()
+        df_display.columns = ['Ticker', 'Qtd', 'P.Médio', 'P.Atual', 'Patrimônio', 'Lucro/Prej', 'Var %', 'Status']
+        
+        st.dataframe(
+            df_display.style.format({
+                'P.Médio': 'R$ {:.2f}',
+                'P.Atual': 'R$ {:.2f}',
+                'Patrimônio': 'R$ {:.2f}',
+                'Lucro/Prej': 'R$ {:.2f}',
+                'Var %': '{:.1f}%'
+            }),
+            use_container_width=True,
+            height=400
+        )
+        
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            st.subheader("Distribuição por Ativo")
+            fig1 = px.pie(df, values='Patrimônio', names='ticker', hole=0.5,
+                         color_discrete_sequence=px.colors.sequential.Gold)
+            st.plotly_chart(fig1, use_container_width=True)
+            
+        with col_g2:
+            st.subheader("Distribuição por Setor")
+            fig2 = px.pie(df, values='Patrimônio', names='setor', hole=0.5,
+                         color_discrete_sequence=["#D4AF37", "#8B6914", "#B8860B", "#CD7F32", "#C0C0C0"])
+            st.plotly_chart(fig2, use_container_width=True)
+        
+        # SEÇÃO DE REBALANCEAMENTO
+        if st.session_state.metas_alocacao:
+            st.write("---")
+            st.subheader("🔄 Recomendação de Rebalanceamento")
+            
+            valor_aporte = st.number_input("💰 Valor disponível para aporte (R$)", 
+                                          min_value=0.0, 
+                                          value=0.0, 
+                                          step=100.0,
+                                          key="aporte_rebalanceamento")
+            
+            df_rebalanceamento = calcular_rebalanceamento(df, st.session_state.metas_alocacao, valor_aporte)
+            
+            if df_rebalanceamento is not None:
+                st.dataframe(
+                    df_rebalanceamento.style.format({
+                        'Atual (R$)': 'R$ {:.2f}',
+                        'Atual (%)': '{:.2f}%',
+                        'Meta (%)': '{:.2f}%',
+                        'Alvo (R$)': 'R$ {:.2f}',
+                        'Diferença (R$)': 'R$ {:.2f}'
+                    }),
+                    use_container_width=True
+                )
+                
+                compras = df_rebalanceamento[df_rebalanceamento['Ação'] == 'COMPRAR']
+                if not compras.empty and valor_aporte > 0:
+                    st.success("### 📝 Sugestão de aporte:")
+                    for _, row in compras.iterrows():
+                        st.write(f"• **{row['Classe']}:** aportar R$ {row['Diferença (R$)']:,.2f}")
+    
+    else:
+        st.info("📭 Sua carteira está vazia. Vá em 'Gestão de Carteira' para adicionar ativos.")
+
+# ============================================
+# 2. ASSISTENTE DE CARTEIRA INTELIGENTE
+# ============================================
+elif menu == "🎯 Montar Carteira":
+    st.title("🎯 Assistente Inteligente de Carteira")
+    st.markdown("### Meta: Rentabilidade de **8% a 12% ao ano**")
+    
+    # --- ETAPA 1: PERFIL ---
+    if st.session_state.etapa_carteira == 1:
+        st.markdown("---")
+        st.subheader("📋 Passo 1: Conte sobre você")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            valor = st.number_input("💰 Quanto quer investir? (R$)", 
+                                   min_value=100.0, 
+                                   value=st.session_state.valor_investir, 
+                                   step=500.0,
+                                   help="Valor total disponível para investir agora")
+            
+            perfil = st.selectbox("🎲 Seu perfil de investidor",
+                                 ["Conservador", "Moderado", "Arrojado"],
+                                 index=["Conservador", "Moderado", "Arrojado"].index(st.session_state.perfil_usuario))
+        
+        with col2:
+            prazo = st.selectbox("⏱️ Prazo do investimento",
+                                ["Curto (1-2 anos)", "Médio (3-5 anos)", "Longo (5+ anos)"],
+                                index=["Curto (1-2 anos)", "Médio (3-5 anos)", "Longo (5+ anos)"].index(st.session_state.prazo_usuario))
+            
+            objetivo = st.selectbox("🎯 Objetivo principal",
+                                   ["Crescimento patrimonial", "Geração de renda mensal", "Proteção contra inflação"],
+                                   index=["Crescimento patrimonial", "Geração de renda mensal", "Proteção contra inflação"].index(st.session_state.objetivo_usuario))
+        
+        if st.button("✅ Próximo: Ver alocação ideal", use_container_width=True):
+            st.session_state.valor_investir = valor
+            st.session_state.perfil_usuario = perfil
+            st.session_state.prazo_usuario = prazo
+            st.session_state.objetivo_usuario = objetivo
+            st.session_state.etapa_carteira = 2
+            st.rerun()
+    
+    # --- ETAPA 2: ALOCAÇÃO ---
+    elif st.session_state.etapa_carteira == 2:
+        st.markdown("---")
+        st.subheader("📊 Passo 2: Alocação recomendada")
+        
+        valor = st.session_state.valor_investir
+        perfil = st.session_state.perfil_usuario
+        
+        if perfil == "Conservador":
+            alocacao = {
+                "Renda Fixa": {"pct": 70, "cor": "#2E86AB", "retorno": 0.08},
+                "FIIs": {"pct": 20, "cor": "#D4AF37", "retorno": 0.09},
+                "Ações": {"pct": 10, "cor": "#F18F01", "retorno": 0.10}
+            }
+        elif perfil == "Moderado":
+            alocacao = {
+                "Renda Fixa": {"pct": 40, "cor": "#2E86AB", "retorno": 0.08},
+                "FIIs": {"pct": 35, "cor": "#D4AF37", "retorno": 0.10},
+                "Ações": {"pct": 25, "cor": "#F18F01", "retorno": 0.12}
+            }
+        else:
+            alocacao = {
+                "Renda Fixa": {"pct": 20, "cor": "#2E86AB", "retorno": 0.08},
+                "FIIs": {"pct": 40, "cor": "#D4AF37", "retorno": 0.11},
+                "Ações": {"pct": 40, "cor": "#F18F01", "retorno": 0.13}
+            }
+        
+        # Salvar metas
+        metas = {classe: dados['pct'] for classe, dados in alocacao.items()}
+        st.session_state.metas_alocacao = metas
+        salvar_meta_alocacao(metas)
+        
+        df_alloc = pd.DataFrame([
+            {
+                "Classe": classe,
+                "Percentual": f"{dados['pct']}%",
+                "Valor (R$)": f"R$ {valor * dados['pct']/100:,.2f}",
+                "Retorno": f"{dados['retorno']*100:.1f}%"
+            }
+            for classe, dados in alocacao.items()
+        ])
+        
+        st.dataframe(df_alloc, use_container_width=True)
+        
+        fig = px.pie(
+            values=[d['pct'] for d in alocacao.values()],
+            nam
