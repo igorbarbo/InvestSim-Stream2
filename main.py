@@ -1,69 +1,64 @@
 import streamlit as st
 import streamlit_authenticator as stauth
 from config.settings import settings
-from database.repository import DatabaseManager, UsuarioRepository
 
-# 1. Configuração Única
-st.set_page_config(page_title="Igorbarbo Private", layout="wide", page_icon="💎")
+# 1. Configuração da Página (Sempre o primeiro comando)
+st.set_page_config(page_title="Igorbarbo Private", layout="wide")
 
-# 2. Inicialização com Cache de Recurso (Evita loops de inicialização)
+# 2. Inicialização do Banco de Dados como Recurso
 @st.cache_resource
-def bootstrap_db():
+def get_db_manager():
+    from database.repository import DatabaseManager
     manager = DatabaseManager()
+    manager._init_database()
     manager.backup()
     return manager
 
-db_manager = bootstrap_db()
+db_manager = get_db_manager()
 
-# 3. Autenticação com Cache de Dados
+# 3. Cache de Credenciais para evitar consultas constantes ao disco
 @st.cache_data(ttl=600)
-def get_auth_data():
+def carregar_credenciais_autenticacao():
     with db_manager.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT username, nome, senha_hash FROM usuarios")
         rows = cursor.fetchall()
     return {"usernames": {r['username']: {"name": r['nome'], "password": r['senha_hash']} for r in rows}}
 
+# 4. Configurar Autenticador
 authenticator = stauth.Authenticate(
-    get_auth_data(),
-    "invest_cookie",
-    "secret_key_123", # Use settings.COOKIE_KEY
+    carregar_credenciais_autenticacao(),
+    "invest_app_cookie",
+    settings.COOKIE_KEY,
     30
 )
 
-name, authentication_status, username = authenticator.login('main')
+authenticator.login()
 
 if st.session_state["authentication_status"]:
-    # Busca ID do usuário uma única vez na sessão
-    if 'user_id' not in st.session_state:
-        repo = UsuarioRepository(db_manager)
-        user = repo.buscar_por_username(st.session_state["username"])
-        st.session_state.user_id = user['id']
-        repo.atualizar_ultimo_login(user['id'])
-
-    # Interface Sidebar
+    # Sidebar e Navegação
     st.sidebar.title("💎 IGORBARBO PRIVATE")
     authenticator.logout('Sair', 'sidebar')
     
     menu = st.sidebar.radio("Navegação", [
-        "🏠 Dashboard", "💰 Preço Teto", "❄️ Bola de Neve", "⚙️ Gestão"
+        "🏠 Dashboard", "💰 Preço Teto", "⚙️ Gestão"
     ])
 
-    # 4. Roteamento Inteligente (Lazy Loading)
+    # 5. Roteamento com Lazy Loading (Importação sob demanda)
     if menu == "🏠 Dashboard":
         from views.dashboard import show_dashboard
-        show_dashboard(st.session_state.user_id)
-
+        show_dashboard(st.session_state["username"])
+        
     elif menu == "💰 Preço Teto":
         from views.preco_teto import show_preco_teto
-        show_preco_teto(st.session_state.user_id)
-
+        show_preco_teto(st.session_state["username"])
+        
     elif menu == "⚙️ Gestão":
         from views.gestao import show_gestao
-        show_gestao(st.session_state.user_id)
+        show_gestao(st.session_state["username"])
 
 elif st.session_state["authentication_status"] is False:
-    st.error('Usuário/Senha inválidos')
-elif st.session_state["authentication_status"] is None:
-    st.warning('Por favor, utilize suas credenciais.')
+    st.error('Usuário ou senha incorretos')
+else:
+    st.warning('Por favor, faça o login')
     
