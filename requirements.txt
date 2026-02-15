@@ -3,3 +3,4 @@ streamlit-authenticator
 pandas
 yfinance
 plotly
+python-dotenv
